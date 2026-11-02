@@ -3,7 +3,7 @@
 
 # Variables de entorno y secretos
 .env
-.env.example
+!.env.example
 
 # Python
 __pycache__/
