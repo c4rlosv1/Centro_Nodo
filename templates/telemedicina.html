@@ -1,0 +1,26 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="hero">
+    <h2>Telemedicina</h2>
+    <p>Plataforma de atención remota con videollamadas integradas</p>
+</div>
+
+<div class="modules-grid">
+    <div class="module-card">
+        <h3>Videoconsultas</h3>
+        <p>Iniciar sesión de videollamada con pacientes mediante WebRTC.</p>
+        <button class="btn btn-primary" onclick="alert('Función en desarrollo - WebRTC')">Iniciar Llamada</button>
+    </div>
+    <div class="module-card">
+        <h3>Notas Clínicas</h3>
+        <p>Registrar evoluciones clínicas durante la videoconsulta.</p>
+        <button class="btn btn-secondary" onclick="alert('Función en desarrollo')">Registrar Notas</button>
+    </div>
+    <div class="module-card">
+        <h3>Historial</h3>
+        <p>Revisar historial de videoconsultas y grabaciones.</p>
+        <button class="btn btn-secondary" onclick="alert('Función en desarrollo')">Ver Historial</button>
+    </div>
+</div>
+{% endblock %}

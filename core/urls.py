@@ -16,7 +16,11 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path
+from clinica.views import home, agendamiento_view, telemedicina_view
 
 urlpatterns = [
     path('admin/', admin.site.urls),
+    path('', home, name='home'),
+    path('agendamiento/', agendamiento_view, name='agendamiento'),
+    path('telemedicina/', telemedicina_view, name='telemedicina'),
 ]

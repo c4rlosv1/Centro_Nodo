@@ -1,0 +1,31 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="hero">
+    <h2>Bienvenido al Sistema de Gestión Clínica</h2>
+    <p>Plataforma integral para la gestión de pacientes, citas y telemedicina en el Centro de Salud Mental Nodo.</p>
+    <div class="actions">
+        <a href="{% url 'agendamiento' %}" class="btn btn-primary">Agendar Cita</a>
+        <a href="{% url 'telemedicina' %}" class="btn btn-secondary">Iniciar Telemedicina</a>
+    </div>
+</div>
+
+<div class="modules-grid">
+    <div class="module-card">
+        <h3>Agendamiento</h3>
+        <p>Gestiona la disponibilidad de especialistas y programas de citas en tiempo real.</p>
+    </div>
+    <div class="module-card">
+        <h3>Telemedicina</h3>
+        <p>Atenciones remotas con videollamadas integradas y notas clínicas continuas.</p>
+    </div>
+    <div class="module-card">
+        <h3>Fichas Clínicas</h3>
+        <p>Historiales médicos electrónicos cifrados y evoluciones de pacientes.</p>
+    </div>
+    <div class="module-card">
+        <h3>Caja y Liquidaciones</h3>
+        <p>Registro de pagos por consulta y automatización de cuadraturas diarias.</p>
+    </div>
+</div>
+{% endblock %}
