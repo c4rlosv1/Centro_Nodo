@@ -12,3 +12,7 @@ def agendamiento_view(request):
 
 def telemedicina_view(request):
     return render(request, 'telemedicina.html')
+
+
+def dashboard_view(request):
+    return render(request, 'dashboard.html')

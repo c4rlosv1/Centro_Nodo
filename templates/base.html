@@ -3,12 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Centro Nodo</title>
+    <title>Centro Nodo - Dashboard Clínico</title>
     {% load static %}
     <link rel="stylesheet" href="{% static 'css/style.css' %}">
+    <link rel="stylesheet" href="{% static 'css/dashboard.css' %}">
     <script>
         (function() {
-            const theme = localStorage.getItem('theme') || 'light';
+            const theme = localStorage.getItem('theme') || 'dark';
             document.documentElement.setAttribute('data-theme', theme);
         })();
     </script>
@@ -20,7 +21,7 @@
             <h1 class="logo">Centro Nodo</h1>
             <nav>
                 <ul>
-                    <li><a href="{% url 'home' %}">Inicio</a></li>
+                    <li><a href="{% url 'dashboard' %}">Dashboard</a></li>
                     <li><a href="{% url 'agendamiento' %}">Agendamiento</a></li>
                     <li><a href="{% url 'telemedicina' %}">Telemedicina</a></li>
                     <li><a href="#">Pacientes</a></li>

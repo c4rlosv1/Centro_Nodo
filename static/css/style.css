@@ -5,24 +5,29 @@
 }
 
 :root {
-    --primary-color: #1e40af;
-    --primary-dark: #1e3a8a;
+    --primary-color: #0ea5e9;
+    --primary-dark: #0284c7;
+    --secondary-color: #8b5cf6;
     --bg-color: #f8fafc;
     --card-bg: #ffffff;
-    --text-color: #2c3e50;
+    --text-color: #1e293b;
     --text-secondary: #64748b;
     --border-color: #e2e8f0;
     --header-bg: #ffffff;
-    --hero-bg: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
-    --hero-border: #bae6fd;
+    --hero-bg: linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%);
+    --hero-border: #7dd3fc;
+    --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+    --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+    --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1);
 }
 
 [data-theme="dark"] {
-    --primary-color: #3b82f6;
-    --primary-dark: #2563eb;
+    --primary-color: #38bdf8;
+    --primary-dark: #0ea5e9;
+    --secondary-color: #a78bfa;
     --bg-color: #0f172a;
     --card-bg: #1e293b;
-    --text-color: #e2e8f0;
+    --text-color: #f1f5f9;
     --text-secondary: #94a3b8;
     --border-color: #334155;
     --header-bg: #1e293b;
@@ -31,24 +36,28 @@
 }
 
 body {
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
     line-height: 1.6;
     color: var(--text-color);
     background-color: var(--bg-color);
-    transition: background-color 0.3s, color 0.3s;
+    transition: background-color 0.3s ease, color 0.3s ease;
 }
 
 .container {
     max-width: 1200px;
     margin: 0 auto;
-    padding: 0 20px;
+    padding: 0 24px;
 }
 
 header {
     background: var(--header-bg);
     border-bottom: 1px solid var(--border-color);
     padding: 1rem 0;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    box-shadow: var(--shadow-sm);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    backdrop-filter: blur(10px);
 }
 
 header .container {
@@ -58,10 +67,11 @@ header .container {
 }
 
 .logo {
-    font-size: 1.5rem;
-    font-weight: 600;
+    font-size: 1.75rem;
+    font-weight: 700;
     color: var(--primary-color);
     margin: 0;
+    letter-spacing: -0.025em;
 }
 
 nav ul {
@@ -75,14 +85,28 @@ nav a {
     color: var(--text-secondary);
     text-decoration: none;
     font-weight: 500;
-    transition: color 0.3s;
+    transition: all 0.3s;
     padding: 0.5rem 0;
-    border-bottom: 2px solid transparent;
+    position: relative;
+}
+
+nav a::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 0;
+    height: 2px;
+    background: var(--primary-color);
+    transition: width 0.3s;
 }
 
 nav a:hover {
     color: var(--primary-color);
-    border-bottom: 2px solid var(--primary-color);
+}
+
+nav a:hover::after {
+    width: 100%;
 }
 
 .theme-toggle {
@@ -92,12 +116,13 @@ nav a:hover {
     padding: 0.5rem 1rem;
     border-radius: 8px;
     cursor: pointer;
-    font-size: 1rem;
+    font-size: 1.1rem;
     transition: all 0.3s;
 }
 
 .theme-toggle:hover {
     border-color: var(--primary-color);
+    transform: scale(1.05);
 }
 
 main {
@@ -107,65 +132,85 @@ main {
 
 .hero {
     text-align: center;
-    padding: 4rem 0;
+    padding: 4rem 2rem;
     background: var(--hero-bg);
-    border-radius: 12px;
+    border-radius: 16px;
     margin-bottom: 3rem;
     border: 1px solid var(--hero-border);
+    position: relative;
+    overflow: hidden;
+}
+
+.hero::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: radial-gradient(circle at 50% 0%, rgba(14, 165, 233, 0.1) 0%, transparent 50%);
+    pointer-events: none;
 }
 
 .hero h2 {
     color: var(--primary-color);
     font-size: 2.5rem;
     margin-bottom: 1rem;
-    font-weight: 600;
+    font-weight: 700;
+    letter-spacing: -0.025em;
+    position: relative;
 }
 
 .hero p {
-    font-size: 1.1rem;
+    font-size: 1.125rem;
     color: var(--text-secondary);
     margin-bottom: 2.5rem;
     max-width: 600px;
     margin-left: auto;
     margin-right: auto;
+    position: relative;
 }
 
 .actions {
     display: flex;
     gap: 1rem;
     justify-content: center;
+    flex-wrap: wrap;
+    position: relative;
 }
 
 .btn {
-    padding: 0.75rem 2rem;
-    border-radius: 8px;
+    padding: 0.875rem 2rem;
+    border-radius: 10px;
     text-decoration: none;
     font-weight: 600;
     transition: all 0.3s;
     display: inline-block;
     border: none;
     cursor: pointer;
+    font-size: 1rem;
 }
 
 .btn-primary {
-    background: var(--primary-color);
+    background: linear-gradient(135deg, var(--primary-color), var(--primary-dark));
     color: white;
+    box-shadow: var(--shadow-md);
 }
 
 .btn-primary:hover {
-    background: var(--primary-dark);
     transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(30, 64, 175, 0.3);
+    box-shadow: var(--shadow-lg);
 }
 
 .btn-secondary {
-    background: var(--border-color);
+    background: var(--card-bg);
     color: var(--text-color);
+    border: 1px solid var(--border-color);
 }
 
 .btn-secondary:hover {
-    background: var(--text-secondary);
-    color: white;
+    background: var(--bg-color);
+    border-color: var(--primary-color);
     transform: translateY(-2px);
 }
 
@@ -179,27 +224,47 @@ main {
 .module-card {
     background: var(--card-bg);
     padding: 2rem;
-    border-radius: 12px;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    border-radius: 16px;
+    box-shadow: var(--shadow-sm);
     border: 1px solid var(--border-color);
     transition: all 0.3s;
+    position: relative;
+    overflow: hidden;
+}
+
+.module-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
+    background: linear-gradient(90deg, var(--primary-color), var(--secondary-color));
+    transform: scaleX(0);
+    transition: transform 0.3s;
 }
 
 .module-card:hover {
     transform: translateY(-4px);
-    box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+    box-shadow: var(--shadow-lg);
     border-color: var(--primary-color);
 }
 
+.module-card:hover::before {
+    transform: scaleX(1);
+}
+
 .module-card h3 {
-    color: var(--primary-color);
+    color: var(--text-color);
     margin-bottom: 1rem;
     font-size: 1.25rem;
+    font-weight: 600;
 }
 
 .module-card p {
     color: var(--text-secondary);
     font-size: 0.95rem;
+    line-height: 1.6;
 }
 
 footer {

@@ -1,0 +1,54 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block content %}
+<!-- Hero Section -->
+<div class="welcome-section">
+    <div class="welcome-content">
+        <h1>Centro Nodo</h1>
+        <p class="subtitle">Salud Mental Integral</p>
+        <p class="tagline">Transformando vidas a través del cuidado profesional y humano</p>
+        <div class="welcome-actions">
+            <a href="{% url 'agendamiento' %}" class="btn btn-primary">Agendar Consulta</a>
+            <a href="{% url 'telemedicina' %}" class="btn btn-secondary">Videoconsulta</a>
+        </div>
+    </div>
+</div>
+
+<!-- Info Cards -->
+<div class="info-grid">
+    <div class="info-card">
+        <div class="info-icon">🧠</div>
+        <h3>Psicoterapia</h3>
+        <p>Atención psicológica individual y familiar con especialistas certificados.</p>
+    </div>
+    <div class="info-card">
+        <div class="info-icon">📞</div>
+        <h3>Telemedicina</h3>
+        <p>Consultas virtuales seguras desde la comodidad de tu hogar.</p>
+    </div>
+    <div class="info-card">
+        <div class="info-icon">📋</div>
+        <h3>Fichas Clínicas</h3>
+        <p>Historial médico digitalizado y protegido con máxima seguridad.</p>
+    </div>
+    <div class="info-card">
+        <div class="info-icon">⏰</div>
+        <h3>Horarios</h3>
+        <p>Lunes a Viernes: 9:00 - 19:00<br>Sábados: 9:00 - 14:00</p>
+    </div>
+</div>
+
+<!-- Contact Info -->
+<div class="contact-section">
+    <div class="contact-card">
+        <h3>¿Necesitas ayuda?</h3>
+        <p>Nuestro equipo está aquí para apoyarte</p>
+        <div class="contact-info">
+            <p>📍 Manuel Antonio Matta 549, Osorno</p>
+            <p>📞 +56 64 2 123 456</p>
+            <p>✉️ contacto@centronodo.cl</p>
+        </div>
+    </div>
+</div>
+{% endblock %}
