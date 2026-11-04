@@ -17,7 +17,7 @@ class Rol(models.Model):
 
 class Usuario(AbstractUser):
     id = models.AutoField(primary_key=True)
-    rol = models.ForeignKey(Rol, on_delete=models.SET_NULL, null=True, blank=True)
+    rol = models.ForeignKey(Rol, on_delete=models.SET_NULL, null=True, blank=True, related_name='usuarios')
     email = models.EmailField(unique=True)
     password_hash = models.CharField(max_length=255, blank=True, null=True)
     activo = models.BooleanField(default=True)
@@ -42,7 +42,31 @@ class Usuario(AbstractUser):
         db_table = 'usuario'
 
     def __str__(self):
-        return self.username
+        rol_nombre = self.rol.nombre if self.rol else "Sin Rol"
+        return f"{self.username} ({rol_nombre})"
+
+    def save(self, *args, **kwargs):
+        # Mantiene sincronizado el estado activo nativo de Django
+        if self.activo is not None:
+            self.is_active = self.activo
+        super().save(*args, **kwargs)
+
+    @property
+    def rol_nombre(self):
+        return self.rol.nombre if self.rol else "Sin Rol"
+
+    @property
+    def es_administrador(self):
+        return self.is_superuser or (self.rol and self.rol.nombre.lower() == 'administrador')
+
+    @property
+    def es_profesional(self):
+        return bool(self.rol and self.rol.nombre.lower() in ['profesional', 'médico', 'medico', 'psicólogo', 'psicologo', 'psiquiatra'])
+
+    @property
+    def es_paciente(self):
+        return bool(self.rol and self.rol.nombre.lower() == 'paciente')
+
 
 
 class Paciente(models.Model):

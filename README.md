@@ -1,21 +1,79 @@
-# Centro_Nodo
-Plataforma web de gestión clínica integral, fichas electrónicas cifradas y telemedicina con WebRTC para el Centro de Salud Mental Nodo. Desarrollado en Django y MySQL.
+# 🏥 GESTION NODO - Sistema de Gestión Integral y Telemedicina
 
-# 🏥 Sistema de Gestión Integral y Telemedicina – Centro Nodo
+Solución web integral orientada a la digitalización clínica, gestión de fichas electrónicas y telemedicina del centro de salud mental **Centro Nodo** (Osorno, Chile).
 
-Solución web integral orientada a la digitalización clínica y optimización administrativa del recinto de salud mental **Centro Nodo** (Osorno, Chile)[cite: 1, 3]. 
+---
 
-El sistema reemplaza flujos de trabajo manuales por un entorno centralizado[cite: 3, 10], seguro y escalable[cite: 10], garantizando trazabilidad[cite: 11], confidencialidad de datos de pacientes[cite: 3, 11] y acceso a atenciones remotas[cite: 3, 10].
+## 🛠️ Tecnologías Utilizadas
+* **Backend:** Python 3.11+ / Django 5.x
+* **Base de Datos:** MySQL 8.0 (Engine InnoDB) / SQLite (Fallback de desarrollo)
+* **Autenticación y Seguridad:** Autenticación personalizada (Username o Email), RBAC por roles, hashing PBKDF2
+* **Frontend:** HTML5 semántico, CSS3 modular (soporte tema Claro/Oscuro), JavaScript Vanilla
+* **Telemedicina:** WebRTC (Peer-to-Peer)
 
-### 🛠️ Tecnologías utilizadas
-* **Backend:** Python 3.11+ / Django 5.x[cite: 16]
-* **Base de Datos:** MySQL 8.0 (Engine InnoDB)[cite: 16]
-* **Real-Time Video:** WebRTC (Peer-to-Peer)[cite: 11, 16]
-* **Frontend:** HTML5, CSS3, JavaScript UI / Figma (Prototipado)[cite: 15, 16]
-* **Seguridad:** Cifrado HTTPS/en reposo[cite: 13, 16], autenticación y permisos por roles (RBAC)[cite: 11, 12].
+---
 
-### 🌟 Módulos Principales
-1. **Agendamiento en tiempo real:** Gestión de disponibilidad de especialistas y mitigación de colisiones horarias[cite: 10, 11].
-2. **Ficha Clínica Electrónica:** Almacenamiento encriptado de historiales médicos y evoluciones de pacientes[cite: 3, 11, 12].
-3. **Entorno de Telemedicina:** Plataforma nativa con panel dual (videollamada + notas clínicas continuas)[cite: 3, 12].
-4. **Caja y Liquidaciones:** Registro de pagos por consulta y automatización de cuadratura de ingresos diarios[cite: 11, 12].
+## 🌟 Módulos Principales
+1. **Control de Acceso y Roles (RBAC):** Perfiles diferenciados para Médicos/Profesionales, Pacientes y Administradores.
+2. **Agendamiento en tiempo real:** Gestión de disponibilidad de especialistas y mitigación de colisiones horarias.
+3. **Ficha Clínica Electrónica:** Almacenamiento seguro de historiales médicos y evoluciones de pacientes.
+4. **Entorno de Telemedicina:** Plataforma con panel dual (videoconsulta y notas clínicas continuas).
+5. **Caja y Liquidaciones:** Registro de pagos por consulta y automatización de cuadratura diaria.
+
+---
+
+## 🚀 Puesta en Marcha Local
+
+### 1. Clonar el repositorio
+```bash
+git clone https://github.com/negrosson/GESTION-NODO.git
+cd GESTION-NODO
+```
+
+### 2. Crear y activar el entorno virtual
+```bash
+# Windows
+python -m venv .venv
+.\.venv\Scripts\activate
+
+# Linux / macOS
+python3 -m venv .venv
+source .venv/bin/activate
+```
+
+### 3. Instalar dependencias
+```bash
+pip install -r requirements.txt
+```
+
+### 4. Ejecutar migraciones
+```bash
+python manage.py migrate
+```
+
+### 5. Crear roles y usuarios de prueba
+```bash
+python manage.py crear_roles_y_usuarios
+```
+
+### 6. Iniciar el servidor
+```bash
+python manage.py runserver
+```
+Abre en tu navegador: [http://127.0.0.1:8000/](http://127.0.0.1:8000/)
+
+---
+
+## 🔑 Credenciales de Prueba
+
+| Rol | Usuario / Correo | Contraseña | Perfil |
+| :--- | :--- | :--- | :--- |
+| **Administrador** | `admin` o `admin@centronodo.cl` | `admin1234` | Superusuario con acceso global |
+| **Profesional** | `doctor.silva` o `dr.silva@centronodo.cl` | `medico1234` | Dr. Andrés Silva (Psiquiatría) |
+| **Paciente** | `paciente.prueba` o `paciente@correo.cl` | `paciente1234` | Juan Pérez |
+
+---
+
+## 📚 Documentación Técnica
+- [Guía Completa de Autenticación y RBAC](docs/AUTENTICACION_Y_LOGIN.md)
+- [Registro de Cambios (Changelog)](docs/CHANGELOG.md)

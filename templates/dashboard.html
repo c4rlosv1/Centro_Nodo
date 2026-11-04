@@ -7,7 +7,13 @@
     <div class="welcome-content">
         <h1>Centro Nodo</h1>
         <p class="subtitle">Salud Mental Integral</p>
-        <p class="tagline">Transformando vidas a través del cuidado profesional y humano</p>
+        <p class="tagline">
+            {% if user.is_authenticated %}
+                Bienvenido/a, <strong>{{ user.get_full_name|default:user.username }}</strong> &bull; Panel de {{ user.rol.nombre|default:"Usuario" }}
+            {% else %}
+                Transformando vidas a través del cuidado profesional y humano
+            {% endif %}
+        </p>
         <div class="welcome-actions">
             <a href="{% url 'agendamiento' %}" class="btn btn-primary">Agendar Consulta</a>
             <a href="{% url 'telemedicina' %}" class="btn btn-secondary">Videoconsulta</a>

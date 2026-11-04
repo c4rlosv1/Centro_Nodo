@@ -30,7 +30,22 @@ SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-change-me-in-producti
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.environ.get('DEBUG', 'True').lower() == 'true'
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['localhost', '127.0.0.1', 'testserver', '*']
+
+AUTH_USER_MODEL = 'clinica.Usuario'
+
+AUTHENTICATION_BACKENDS = [
+    'clinica.backends.EmailOrUsernameModelBackend',
+    'django.contrib.auth.backends.ModelBackend',
+]
+
+LOGIN_URL = 'login'
+LOGIN_REDIRECT_URL = 'dashboard'
+LOGOUT_REDIRECT_URL = 'login'
+
+# Envío de emails para reseteo de contraseñas (por consola en desarrollo)
+EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+
 
 
 # Application definition
@@ -121,7 +136,7 @@ AUTH_PASSWORD_VALIDATORS = [
 # Internationalization
 # https://docs.djangoproject.com/en/5.2/topics/i18n/
 
-LANGUAGE_CODE = 'en-us'
+LANGUAGE_CODE = 'es-cl'
 
 TIME_ZONE = 'UTC'
 

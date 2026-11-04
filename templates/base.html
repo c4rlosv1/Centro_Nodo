@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Centro Nodo - Dashboard Clínico</title>
+    <title>Centro Nodo - Sistema Clínico y Telemedicina</title>
     {% load static %}
     <link rel="stylesheet" href="{% static 'css/style.css' %}">
     <link rel="stylesheet" href="{% static 'css/dashboard.css' %}">
@@ -17,29 +17,65 @@
 </head>
 <body>
     <header>
-        <div class="container">
-            <h1 class="logo">Centro Nodo</h1>
+        <div class="container header-container">
+            <a href="{% url 'dashboard' %}" class="logo-link">
+                <h1 class="logo">Centro Nodo</h1>
+            </a>
             <nav>
-                <ul>
+                <ul class="nav-list">
                     <li><a href="{% url 'dashboard' %}">Dashboard</a></li>
                     <li><a href="{% url 'agendamiento' %}">Agendamiento</a></li>
                     <li><a href="{% url 'telemedicina' %}">Telemedicina</a></li>
-                    <li><a href="#">Pacientes</a></li>
-                    <li><a href="#">Fichas Clínicas</a></li>
-                    <li><button id="theme-toggle" class="theme-toggle">🌙</button></li>
+                    
+                    {% if user.is_authenticated %}
+                        <li class="user-badge-item">
+                            <div class="user-badge" title="Conectado como {{ user.username }}">
+                                <span class="user-avatar">👤</span>
+                                <span class="user-name">{{ user.first_name|default:user.username }}</span>
+                                {% if user.rol %}
+                                    <span class="role-tag">{{ user.rol.nombre }}</span>
+                                {% endif %}
+                            </div>
+                        </li>
+                        <li>
+                            <a href="{% url 'logout' %}" class="btn-logout" title="Cerrar Sesión">Cerrar Sesión</a>
+                        </li>
+                    {% else %}
+                        <li>
+                            <a href="{% url 'login' %}" class="btn-login-nav">Iniciar Sesión</a>
+                        </li>
+                    {% endif %}
+
+                    <li><button id="theme-toggle" class="theme-toggle" title="Cambiar tema">🌙</button></li>
                 </ul>
             </nav>
         </div>
     </header>
 
     <main class="container">
+        {% if messages %}
+            <div class="messages-container">
+                {% for message in messages %}
+                    <div class="alert alert-{{ message.tags }}">
+                        <span class="alert-icon">
+                            {% if message.tags == 'error' %}⚠️
+                            {% elif message.tags == 'success' %}✅
+                            {% elif message.tags == 'warning' %}🔔
+                            {% else %}ℹ️{% endif %}
+                        </span>
+                        <span class="alert-text">{{ message }}</span>
+                    </div>
+                {% endfor %}
+            </div>
+        {% endif %}
+
         {% block content %}
         {% endblock %}
     </main>
 
     <footer>
         <div class="container">
-            <p>&copy; 2026 Centro Nodo - Sistema de Gestión Clínica</p>
+            <p>&copy; 2026 Centro Nodo - Sistema de Gestión Clínica y Telemedicina (Osorno, Chile)</p>
         </div>
     </footer>
 </body>
