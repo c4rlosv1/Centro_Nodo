@@ -1,5 +1,5 @@
 from django.core.management.base import BaseCommand
-from clinica.models import Rol, Usuario, Profesional, Paciente
+from clinica.models import Rol, Usuario, Profesional, Paciente, FichaClinica
 
 
 class Command(BaseCommand):
@@ -76,7 +76,7 @@ class Command(BaseCommand):
                 last_name="Pérez",
                 rol=roles["Paciente"],
             )
-            Paciente.objects.get_or_create(
+            paciente_obj, _ = Paciente.objects.get_or_create(
                 rut="19.876.543-2",
                 defaults={
                     'usuario': pac_user,
@@ -84,7 +84,15 @@ class Command(BaseCommand):
                     'apellidos': "Pérez",
                 }
             )
-            self.stdout.write(self.style.SUCCESS(" + Usuario 'paciente.prueba' (Paciente) creado exitosamente."))
+            FichaClinica.objects.get_or_create(
+                paciente=paciente_obj,
+                defaults={
+                    'antecedentesMedicos': "Sin antecedentes mórbidos relevantes.",
+                    'alergias': "Ninguna conocida.",
+                    'grupoSanguineo': "O+",
+                }
+            )
+            self.stdout.write(self.style.SUCCESS(" + Usuario 'paciente.prueba' y Ficha Clínica creados exitosamente."))
         else:
             self.stdout.write(" - Usuario 'paciente.prueba' ya existe.")
 

@@ -71,7 +71,24 @@
   - Roles iniciales: `Administrador`, `Profesional`, `Paciente`, `Recepcionista`.
   - Superusuario `admin` (`admin1234`).
   - Profesional médico `doctor.silva` (`medico1234`) asociado a su ficha en la tabla `profesional`.
-  - Paciente `paciente.prueba` (`paciente1234`) asociado a su ficha en la tabla `paciente`.
+  - Paciente `paciente.prueba` (`paciente1234`) asociado a su ficha en la tabla `paciente` y su `FichaClinica`.
+
+### 10. Refactorización del Modelo Entidad-Relación (`clinica/models.py`)
+- **Corrección de Relación Usuario - Perfiles:**
+  - `Paciente.usuario`: Ajustado a `OneToOneField(Usuario)` (1 a 1, con opción `null=True` para pacientes registrados sin cuenta web inicial).
+  - `Profesional.usuario`: Ajustado a `OneToOneField(Usuario)` (1 a 1 estricto).
+- **Separación de Expediente y Consulta Médica:**
+  - `FichaClinica`: Rediseñada como expediente permanente del paciente (1 a 1 con `Paciente`), eliminando la clave foránea `cita_id`.
+  - `AtencionClinica` *(Nueva Entidad Intermedia)*: Vincula la `FichaClinica` con la `Cita` y el `Profesional` tratante, almacenando el motivo, diagnóstico, notas confidenciales de evolución e indicaciones terapéuticas.
+- **Incorporación de `BloqueoHorario`:**
+  - Soporte para que los especialistas marquen tramos de indisponibilidad horaria.
+- **Integración con Django Admin (`clinica/admin.py`):**
+  - Registro de todas las entidades clínicas y de agendamiento con filtros, búsquedas y edición en línea de atenciones clínicas.
+
+### 11. Documentación para Desarrolladores (`docs/`)
+- `docs/DIAGRAMA_ER_CORREGIDO.md`: Análisis técnico detallado de los errores corregidos y nuevo diagrama en notación Mermaid.
+- `docs/COMO_SUBIR_CAMBIOS_A_GITHUB.md`: Manual paso a paso para que cualquier integrante del equipo pueda confirmar y subir cambios usando la terminal o la interfaz visual de VS Code.
+
 
 ---
 

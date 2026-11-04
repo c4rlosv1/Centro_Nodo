@@ -1,5 +1,6 @@
 from django.db import models
 from django.contrib.auth.models import AbstractUser
+from django.utils import timezone
 
 
 class Rol(models.Model):
@@ -68,29 +69,48 @@ class Usuario(AbstractUser):
         return bool(self.rol and self.rol.nombre.lower() == 'paciente')
 
 
-
 class Paciente(models.Model):
+    """
+    Perfil clínico del paciente.
+    Relación 1 a 1 con Usuario (opcional si el paciente es registrado presencialmente sin portal web).
+    """
     id = models.AutoField(primary_key=True)
-    usuario = models.ForeignKey(Usuario, on_delete=models.CASCADE, related_name='pacientes')
+    usuario = models.OneToOneField(
+        Usuario,
+        on_delete=models.CASCADE,
+        related_name='paciente',
+        null=True,
+        blank=True
+    )
     rut = models.CharField(max_length=20, unique=True)
     nombres = models.CharField(max_length=100)
     apellidos = models.CharField(max_length=100)
+    telefono = models.CharField(max_length=30, blank=True, null=True)
 
     class Meta:
         app_label = 'clinica'
         db_table = 'paciente'
 
     def __str__(self):
-        return f"{self.apellidos}, {self.nombres}"
+        return f"{self.apellidos}, {self.nombres} ({self.rut})"
 
 
 class Profesional(models.Model):
+    """
+    Perfil del profesional de la salud mental (psicólogo, psiquiatra, terapeuta).
+    Relación 1 a 1 con Usuario.
+    """
     id = models.AutoField(primary_key=True)
-    usuario = models.ForeignKey(Usuario, on_delete=models.CASCADE, related_name='profesionales')
+    usuario = models.OneToOneField(
+        Usuario,
+        on_delete=models.CASCADE,
+        related_name='profesional'
+    )
     rut = models.CharField(max_length=20, unique=True)
     nombres = models.CharField(max_length=100)
     apellidos = models.CharField(max_length=100)
     especialidad = models.CharField(max_length=100)
+    registro_salud = models.CharField(max_length=50, blank=True, null=True)
 
     class Meta:
         app_label = 'clinica'
@@ -100,61 +120,122 @@ class Profesional(models.Model):
         return f"{self.apellidos}, {self.nombres} - {self.especialidad}"
 
 
-class Cita(models.Model):
+class BloqueoHorario(models.Model):
+    """
+    Bloqueos de agenda o feriados/permisos del profesional.
+    """
     id = models.AutoField(primary_key=True)
-    paciente = models.ForeignKey(Paciente, on_delete=models.CASCADE)
-    profesional = models.ForeignKey(Profesional, on_delete=models.CASCADE)
+    profesional = models.ForeignKey(
+        Profesional,
+        on_delete=models.CASCADE,
+        related_name='bloqueos_horario'
+    )
     fechaHoraInicio = models.DateTimeField()
     fechaHoraFin = models.DateTimeField()
-    estado = models.CharField(max_length=50)
+    motivo = models.CharField(max_length=255, blank=True, null=True)
+    estado = models.CharField(max_length=50, default='Activo')
+
+    class Meta:
+        app_label = 'clinica'
+        db_table = 'bloqueo_horario'
+
+    def __str__(self):
+        return f"Bloqueo {self.profesional} ({self.fechaHoraInicio.strftime('%d/%m/%Y %H:%M')})"
+
+
+class Cita(models.Model):
+    """
+    Evento de agendamiento entre un paciente y un profesional.
+    """
+    id = models.AutoField(primary_key=True)
+    paciente = models.ForeignKey(Paciente, on_delete=models.CASCADE, related_name='citas')
+    profesional = models.ForeignKey(Profesional, on_delete=models.CASCADE, related_name='citas')
+    fechaHoraInicio = models.DateTimeField()
+    fechaHoraFin = models.DateTimeField()
+    estado = models.CharField(max_length=50, default='Agendada')  # Agendada, Confirmada, Realizada, Cancelada
 
     class Meta:
         app_label = 'clinica'
         db_table = 'cita'
 
     def __str__(self):
-        return f"Cita {self.id} - {self.paciente}"
+        return f"Cita #{self.id}: {self.paciente} con {self.profesional} ({self.fechaHoraInicio.strftime('%d/%m/%Y %H:%M')})"
 
 
 class Videoconsulta(models.Model):
+    """
+    Sesión de telemedicina WebRTC asociada a una cita médica.
+    """
     id = models.AutoField(primary_key=True)
-    cita = models.ForeignKey(Cita, on_delete=models.CASCADE)
+    cita = models.OneToOneField(Cita, on_delete=models.CASCADE, related_name='videoconsulta')
     urlSalaWebRTC = models.CharField(max_length=255)
-    estadoConexion = models.CharField(max_length=50)
+    estadoConexion = models.CharField(max_length=50, default='Pendiente')  # Pendiente, En curso, Finalizada
 
     class Meta:
         app_label = 'clinica'
         db_table = 'videoconsulta'
 
     def __str__(self):
-        return f"Videoconsulta {self.id} - Cita {self.cita.id}"
+        return f"Videoconsulta #{self.id} - Cita #{self.cita.id}"
 
 
 class Pago(models.Model):
+    """
+    Registro del pago o copago asociado a una consulta médica.
+    """
     id = models.AutoField(primary_key=True)
-    cita = models.ForeignKey(Cita, on_delete=models.CASCADE)
+    cita = models.ForeignKey(Cita, on_delete=models.CASCADE, related_name='pagos')
     monto = models.DecimalField(max_digits=10, decimal_places=2)
-    estado = models.CharField(max_length=50)
+    estado = models.CharField(max_length=50, default='Pendiente')  # Pendiente, Pagado, Anulado
+    fechaPago = models.DateTimeField(default=timezone.now, blank=True)
 
     class Meta:
         app_label = 'clinica'
         db_table = 'pago'
 
     def __str__(self):
-        return f"Pago {self.id} - ${self.monto}"
+        return f"Pago #{self.id} - Cita #{self.cita.id} (${self.monto} - {self.estado})"
 
 
 class FichaClinica(models.Model):
+    """
+    Expediente médico general y único del paciente en Centro Nodo.
+    Relación 1 a 1 con Paciente.
+    """
     id = models.AutoField(primary_key=True)
-    cita = models.ForeignKey(Cita, on_delete=models.CASCADE)
-    paciente = models.ForeignKey(Paciente, on_delete=models.CASCADE)
-    profesional = models.ForeignKey(Profesional, on_delete=models.CASCADE)
-    motivoConsulta = models.TextField()
-    diagnostico = models.TextField()
+    paciente = models.OneToOneField(Paciente, on_delete=models.CASCADE, related_name='ficha_clinica')
+    fechaCreacion = models.DateTimeField(default=timezone.now)
+    antecedentesMedicos = models.TextField(blank=True, null=True)
+    alergias = models.TextField(blank=True, null=True)
+    grupoSanguineo = models.CharField(max_length=10, blank=True, null=True)
 
     class Meta:
         app_label = 'clinica'
         db_table = 'ficha_clinica'
 
     def __str__(self):
-        return f"Ficha {self.id} - {self.paciente}"
+        return f"Ficha Clínica #{self.id} - {self.paciente}"
+
+
+class AtencionClinica(models.Model):
+    """
+    TABLA INTERMEDIA entre Ficha Clínica y Cita.
+    Representa el acto médico / evolución clínica de cada consulta realizada.
+    """
+    id = models.AutoField(primary_key=True)
+    fichaClinica = models.ForeignKey(FichaClinica, on_delete=models.CASCADE, related_name='atenciones')
+    cita = models.OneToOneField(Cita, on_delete=models.SET_NULL, null=True, blank=True, related_name='atencion_clinica')
+    profesional = models.ForeignKey(Profesional, on_delete=models.CASCADE, related_name='atenciones_realizadas')
+    fechaHora = models.DateTimeField(default=timezone.now)
+    motivoConsulta = models.TextField()
+    diagnostico = models.TextField()
+    evolucionNotas = models.TextField(blank=True, null=True)
+    indicacionesTratamiento = models.TextField(blank=True, null=True)
+
+
+    class Meta:
+        app_label = 'clinica'
+        db_table = 'atencion_clinica'
+
+    def __str__(self):
+        return f"Atención #{self.id} - Ficha #{self.fichaClinica.id} ({self.profesional.nombres})"
