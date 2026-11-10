@@ -1,0 +1,98 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h2>👤 {{ paciente.nombres }} {{ paciente.apellidos }}</h2>
+        <p>RUT: <strong>{{ paciente.rut }}</strong></p>
+    </div>
+    <div class="page-actions">
+        {% if user.es_staff_clinico %}
+            <a href="{% url 'pacientes_lista' %}" class="btn btn-secondary">← Directorio</a>
+            <a href="{% url 'paciente_editar' paciente.id %}" class="btn btn-secondary">Editar Datos</a>
+            <a href="{% url 'agendamiento' %}?paciente_id={{ paciente.id }}" class="btn btn-primary">+ Agendar Cita</a>
+        {% endif %}
+        {% if puede_ver_ficha %}
+            <a href="{% url 'ficha_detalle' ficha.id %}" class="btn btn-success">📋 Abrir Ficha Clínica</a>
+        {% endif %}
+    </div>
+</div>
+
+<div class="split-layout">
+    <div class="panel-card">
+        <h3>Datos Personales</h3>
+        <div class="info-kv-list">
+            <div class="info-kv-item">
+                <span class="info-kv-label">RUT</span>
+                <span class="info-kv-value">{{ paciente.rut }}</span>
+            </div>
+            <div class="info-kv-item">
+                <span class="info-kv-label">Nombre Completo</span>
+                <span class="info-kv-value">{{ paciente.nombres }} {{ paciente.apellidos }}</span>
+            </div>
+            <div class="info-kv-item">
+                <span class="info-kv-label">Teléfono</span>
+                <span class="info-kv-value">{{ paciente.telefono|default:"No registrado" }}</span>
+            </div>
+            <div class="info-kv-item">
+                <span class="info-kv-label">Cuenta Portal Web</span>
+                <span class="info-kv-value">
+                    {% if paciente.usuario %}
+                        {{ paciente.usuario.email }} (Usuario: <code>{{ paciente.usuario.username }}</code>)
+                    {% else %}
+                        Sin cuenta web (Atención presencial)
+                    {% endif %}
+                </span>
+            </div>
+            <div class="info-kv-item">
+                <span class="info-kv-label">Expediente Clínico</span>
+                <span class="info-kv-value">Ficha #{{ ficha.id }} (Apertura: {{ ficha.fechaCreacion|date:"d/m/Y" }})</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="panel-card">
+        <h3>📅 Historial de Citas</h3>
+        {% if citas %}
+            <div class="table-wrapper">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Fecha / Horario</th>
+                            <th>Profesional</th>
+                            <th>Estado</th>
+                            <th>Acción</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for c in citas %}
+                        <tr>
+                            <td>
+                                <strong>{{ c.fechaHoraInicio|date:"d/m/Y" }}</strong><br>
+                                <small class="timeline-meta">{{ c.fechaHoraInicio|date:"H:i" }} - {{ c.fechaHoraFin|date:"H:i" }}</small>
+                            </td>
+                            <td>{{ c.profesional.nombres }} {{ c.profesional.apellidos }}<br><small class="timeline-meta">{{ c.profesional.especialidad }}</small></td>
+                            <td><span class="status-badge status-{{ c.estado|lower|slugify }}">{{ c.estado }}</span></td>
+                            <td>
+                                {% if c.atencion_clinica and puede_ver_ficha %}
+                                    <a href="{% url 'ficha_detalle' ficha.id %}" class="btn btn-sm btn-secondary">Ver Evolución</a>
+                                {% elif c.estado != 'Cancelada' and user.es_administrador or c.estado != 'Cancelada' and user.es_profesional %}
+                                    <a href="{% url 'ficha_detalle' ficha.id %}?cita_id={{ c.id }}" class="btn btn-sm btn-primary">Registrar Atención</a>
+                                {% else %}
+                                    —
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <div class="empty-state">
+                <p>Este paciente aún no registra citas médicas.</p>
+            </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+

@@ -105,3 +105,4 @@ Luego vuelve a ejecutar tu `git push`.
 
 ### ¿Se subirán mis contraseñas o mi base de datos SQLite?
 **No.** El archivo `.gitignore` ya está configurado para proteger tu archivo `.env` (credenciales privadas) y `db.sqlite3` (base de datos local de pruebas), por lo que nunca se subirán por accidente.
+

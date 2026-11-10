@@ -1,0 +1,212 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h2>📋 Ficha Clínica #{{ ficha.id }} — {{ paciente.nombres }} {{ paciente.apellidos }}</h2>
+        <p>RUT: <strong>{{ paciente.rut }}</strong> &bull; Apertura: {{ ficha.fechaCreacion|date:"d/m/Y" }}</p>
+    </div>
+    <div class="page-actions">
+        {% if es_clinico %}
+            <a href="{% url 'fichas_lista' %}" class="btn btn-secondary">← Todas las Fichas</a>
+            <a href="{% url 'paciente_detalle' paciente.id %}" class="btn btn-secondary">Perfil Paciente</a>
+            <button type="button" id="btn-toggle-atencion" class="btn btn-primary">+ Registrar Atención</button>
+        {% endif %}
+    </div>
+</div>
+
+<div class="split-layout">
+    <!-- Columna Izquierda: Antecedentes Generales de FichaClinica -->
+    <div>
+        <div class="panel-card">
+            <div style="display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; margin-bottom: 1rem;">
+                <h3 style="margin-bottom: 0;">🩺 Antecedentes Generales</h3>
+                <span class="badge-encrypted" title="Datos protegidos con cifrado Fernet en base de datos">🔐 Cifrado</span>
+            </div>
+            <div class="info-kv-list">
+                <div class="info-kv-item">
+                    <span class="info-kv-label">Grupo Sanguíneo</span>
+                    <span class="info-kv-value">{{ ficha.grupoSanguineo|default:"No informado" }}</span>
+                </div>
+                <div class="info-kv-item">
+                    <span class="info-kv-label">Alergias Conocidas</span>
+                    <span class="info-kv-value">{{ ficha.alergias|default:"Sin registro de alergias"|linebreaksbr }}</span>
+                </div>
+                <div class="info-kv-item">
+                    <span class="info-kv-label">Antecedentes Médicos y Psicológicos</span>
+                    <span class="info-kv-value">{{ ficha.antecedentesMedicos|default:"Sin antecedentes registrados"|linebreaksbr }}</span>
+                </div>
+            </div>
+
+            {% if es_clinico and ficha_form %}
+                <div style="margin-top: 1.25rem; border-top: 1px solid var(--border-color); padding-top: 1rem;">
+                    <button type="button" id="btn-toggle-antecedentes" class="btn btn-sm btn-secondary" style="width: 100%;">
+                        ✏️ Editar Antecedentes Generales
+                    </button>
+
+                    <form id="form-antecedentes" method="POST" action="{% url 'ficha_editar_antecedentes' ficha.id %}" class="auth-form" style="margin-top: 1rem; display: none;">
+                        {% csrf_token %}
+                        {% for field in ficha_form %}
+                            <div class="form-group">
+                                <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+                                {{ field }}
+                            </div>
+                        {% endfor %}
+                        <button type="submit" class="btn btn-sm btn-success">Guardar Antecedentes</button>
+                    </form>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Columna Derecha: Registro de Atención + Historial Cronológico (AtencionClinica) -->
+    <div>
+        {% if es_clinico and atencion_form %}
+            <div id="panel-nueva-atencion" class="panel-card" style="{% if not request.GET.cita_id and not abrir_modal_atencion %}display: none;{% endif %}">
+                <h3>📝 Nueva Atención Clínica (Evolución)</h3>
+                <form method="POST" action="{% url 'atencion_crear' ficha.id %}" class="auth-form" novalidate>
+                    {% csrf_token %}
+
+                    {% if atencion_form.non_field_errors %}
+                        <div class="alert alert-error">
+                            <span>⚠️ {{ atencion_form.non_field_errors.0 }}</span>
+                        </div>
+                    {% endif %}
+
+                    <div class="form-grid-2">
+                        <div class="form-group">
+                            <label for="{{ atencion_form.cita.id_for_label }}">{{ atencion_form.cita.label }}</label>
+                            {{ atencion_form.cita }}
+                            {% if atencion_form.cita.errors %}
+                                <span class="field-error">{{ atencion_form.cita.errors.0 }}</span>
+                            {% endif %}
+                        </div>
+
+                        <div class="form-group">
+                            <label for="{{ atencion_form.profesional.id_for_label }}">{{ atencion_form.profesional.label }}</label>
+                            {{ atencion_form.profesional }}
+                            {% if atencion_form.profesional.errors %}
+                                <span class="field-error">{{ atencion_form.profesional.errors.0 }}</span>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="{{ atencion_form.motivoConsulta.id_for_label }}">{{ atencion_form.motivoConsulta.label }}</label>
+                        {{ atencion_form.motivoConsulta }}
+                        {% if atencion_form.motivoConsulta.errors %}
+                            <span class="field-error">{{ atencion_form.motivoConsulta.errors.0 }}</span>
+                        {% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label for="{{ atencion_form.diagnostico.id_for_label }}">{{ atencion_form.diagnostico.label }}</label>
+                        {{ atencion_form.diagnostico }}
+                        {% if atencion_form.diagnostico.errors %}
+                            <span class="field-error">{{ atencion_form.diagnostico.errors.0 }}</span>
+                        {% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label for="{{ atencion_form.evolucionNotas.id_for_label }}">{{ atencion_form.evolucionNotas.label }}</label>
+                        {{ atencion_form.evolucionNotas }}
+                    </div>
+
+                    <div class="form-group">
+                        <label for="{{ atencion_form.indicacionesTratamiento.id_for_label }}">{{ atencion_form.indicacionesTratamiento.label }}</label>
+                        {{ atencion_form.indicacionesTratamiento }}
+                    </div>
+
+                    <div class="actions-inline" style="justify-content: flex-end;">
+                        <button type="button" id="btn-cancelar-atencion" class="btn btn-secondary">Cancelar</button>
+                        <button type="submit" class="btn btn-primary">Guardar Atención Clínica</button>
+                    </div>
+                </form>
+            </div>
+        {% endif %}
+
+        <div class="panel-card">
+            <h3>🕒 Historial de Atenciones Clínicas ({{ atenciones.count }})</h3>
+
+            {% if atenciones %}
+                <div class="timeline">
+                    {% for atencion in atenciones %}
+                        <div class="timeline-item">
+                            <div class="timeline-header">
+                                <div>
+                                    <strong>Atención #{{ atencion.id }}</strong> —
+                                    <span>{{ atencion.profesional.nombres }} {{ atencion.profesional.apellidos }}</span>
+                                    <span class="timeline-meta">({{ atencion.profesional.especialidad }})</span>
+                                </div>
+                                <div class="timeline-meta">
+                                    {{ atencion.fechaHora|date:"d/m/Y H:i" }}
+                                    {% if atencion.cita %}
+                                        &bull; <span class="status-badge status-realizada">Cita #{{ atencion.cita.id }}</span>
+                                    {% endif %}
+                                </div>
+                            </div>
+
+                            <div class="clinical-block">
+                                <div class="clinical-block-title">Motivo de Consulta</div>
+                                <p>{{ atencion.motivoConsulta|linebreaksbr }}</p>
+                            </div>
+
+                            <div class="clinical-block">
+                                <div class="clinical-block-title">Diagnóstico</div>
+                                <p>{{ atencion.diagnostico|linebreaksbr }}</p>
+                            </div>
+
+                            {% if atencion.indicacionesTratamiento %}
+                                <div class="clinical-block">
+                                    <div class="clinical-block-title">Indicaciones y Tratamiento</div>
+                                    <p>{{ atencion.indicacionesTratamiento|linebreaksbr }}</p>
+                                </div>
+                            {% endif %}
+
+                            {% if es_clinico and atencion.evolucionNotas %}
+                                <div class="clinical-block-confidential">
+                                    <div class="clinical-block-title">🔒 Notas de Evolución (Solo uso del equipo clínico)</div>
+                                    <p>{{ atencion.evolucionNotas|linebreaksbr }}</p>
+                                </div>
+                            {% endif %}
+                        </div>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <div class="empty-state">
+                    <p>No existen atenciones registradas todavía en esta ficha clínica.</p>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const btnAntecedentes = document.getElementById('btn-toggle-antecedentes');
+    const formAntecedentes = document.getElementById('form-antecedentes');
+    if (btnAntecedentes && formAntecedentes) {
+        btnAntecedentes.addEventListener('click', function() {
+            const visible = formAntecedentes.style.display !== 'none';
+            formAntecedentes.style.display = visible ? 'none' : 'flex';
+        });
+    }
+
+    const btnAtencion = document.getElementById('btn-toggle-atencion');
+    const btnCancelar = document.getElementById('btn-cancelar-atencion');
+    const panelAtencion = document.getElementById('panel-nueva-atencion');
+    if (btnAtencion && panelAtencion) {
+        btnAtencion.addEventListener('click', function() {
+            panelAtencion.style.display = 'block';
+            panelAtencion.scrollIntoView({ behavior: 'smooth' });
+        });
+    }
+    if (btnCancelar && panelAtencion) {
+        btnCancelar.addEventListener('click', function() {
+            panelAtencion.style.display = 'none';
+        });
+    }
+});
+</script>
+{% endblock %}
+

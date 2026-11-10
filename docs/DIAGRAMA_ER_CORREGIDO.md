@@ -168,3 +168,4 @@ erDiagram
 | `diagnostico` | TextField | No | Diagnóstico clínico según CIE-10 / DSM-5. |
 | `evolucionNotas` | TextField | Sí | Notas clínicas confidenciales y progreso del tratamiento. |
 | `indicacionesTratamiento` | TextField | Sí | Prescripción farmacológica o pautas terapéuticas entregadas al paciente. |
+

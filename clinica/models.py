@@ -1,6 +1,7 @@
 from django.db import models
 from django.contrib.auth.models import AbstractUser
 from django.utils import timezone
+from .fields import EncryptedTextField
 
 
 class Rol(models.Model):
@@ -67,6 +68,14 @@ class Usuario(AbstractUser):
     @property
     def es_paciente(self):
         return bool(self.rol and self.rol.nombre.lower() == 'paciente')
+
+    @property
+    def es_recepcionista(self):
+        return bool(self.rol and self.rol.nombre.lower() in ['recepcionista', 'recepción', 'administrativo'])
+
+    @property
+    def es_staff_clinico(self):
+        return self.es_administrador or self.es_profesional or self.es_recepcionista
 
 
 class Paciente(models.Model):
@@ -186,7 +195,18 @@ class Pago(models.Model):
     id = models.AutoField(primary_key=True)
     cita = models.ForeignKey(Cita, on_delete=models.CASCADE, related_name='pagos')
     monto = models.DecimalField(max_digits=10, decimal_places=2)
+    prevision = models.CharField(max_length=50, default='Particular')  # Particular, Fonasa, Isapre
+    metodoPago = models.CharField(max_length=50, default='Transferencia')  # Efectivo, Débito, Crédito, Transferencia, Bono Fonasa
     estado = models.CharField(max_length=50, default='Pendiente')  # Pendiente, Pagado, Anulado
+    numeroComprobante = models.CharField(max_length=50, blank=True, null=True)
+    observaciones = models.CharField(max_length=255, blank=True, null=True)
+    registradoPor = models.ForeignKey(
+        Usuario,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='pagos_registrados'
+    )
     fechaPago = models.DateTimeField(default=timezone.now, blank=True)
 
     class Meta:
@@ -200,13 +220,13 @@ class Pago(models.Model):
 class FichaClinica(models.Model):
     """
     Expediente médico general y único del paciente en Centro Nodo.
-    Relación 1 a 1 con Paciente.
+    Relación 1 a 1 con Paciente. Los campos clínicos se almacenan cifrados en reposo.
     """
     id = models.AutoField(primary_key=True)
     paciente = models.OneToOneField(Paciente, on_delete=models.CASCADE, related_name='ficha_clinica')
     fechaCreacion = models.DateTimeField(default=timezone.now)
-    antecedentesMedicos = models.TextField(blank=True, null=True)
-    alergias = models.TextField(blank=True, null=True)
+    antecedentesMedicos = EncryptedTextField(blank=True, null=True)
+    alergias = EncryptedTextField(blank=True, null=True)
     grupoSanguineo = models.CharField(max_length=10, blank=True, null=True)
 
     class Meta:
@@ -221,16 +241,17 @@ class AtencionClinica(models.Model):
     """
     TABLA INTERMEDIA entre Ficha Clínica y Cita.
     Representa el acto médico / evolución clínica de cada consulta realizada.
+    Sus campos clínicos sensibles se almacenan cifrados mediante Fernet.
     """
     id = models.AutoField(primary_key=True)
     fichaClinica = models.ForeignKey(FichaClinica, on_delete=models.CASCADE, related_name='atenciones')
     cita = models.OneToOneField(Cita, on_delete=models.SET_NULL, null=True, blank=True, related_name='atencion_clinica')
     profesional = models.ForeignKey(Profesional, on_delete=models.CASCADE, related_name='atenciones_realizadas')
     fechaHora = models.DateTimeField(default=timezone.now)
-    motivoConsulta = models.TextField()
-    diagnostico = models.TextField()
-    evolucionNotas = models.TextField(blank=True, null=True)
-    indicacionesTratamiento = models.TextField(blank=True, null=True)
+    motivoConsulta = EncryptedTextField()
+    diagnostico = EncryptedTextField()
+    evolucionNotas = EncryptedTextField(blank=True, null=True)
+    indicacionesTratamiento = EncryptedTextField(blank=True, null=True)
 
 
     class Meta:

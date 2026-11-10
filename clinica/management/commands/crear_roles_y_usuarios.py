@@ -43,7 +43,7 @@ class Command(BaseCommand):
             admin_user.save()
             self.stdout.write(" - Superusuario 'admin' ya existe (rol verificado).")
 
-        # 3. Crear Usuario Profesional (Médico / Psiquiatra)
+        # 3. Crear Usuario Profesional 1 (Psiquiatra)
         if not Usuario.objects.filter(username="doctor.silva").exists():
             prof_user = Usuario.objects.create_user(
                 username="doctor.silva",
@@ -66,7 +66,44 @@ class Command(BaseCommand):
         else:
             self.stdout.write(" - Usuario 'doctor.silva' ya existe.")
 
-        # 4. Crear Usuario Paciente
+        # 4. Crear Usuario Profesional 2 (Psicóloga)
+        if not Usuario.objects.filter(username="psicologa.rojas").exists():
+            prof2_user = Usuario.objects.create_user(
+                username="psicologa.rojas",
+                email="p.rojas@centronodo.cl",
+                password="medico1234",
+                first_name="Camila",
+                last_name="Rojas",
+                rol=roles["Profesional"],
+            )
+            Profesional.objects.get_or_create(
+                rut="17.654.321-3",
+                defaults={
+                    'usuario': prof2_user,
+                    'nombres': "Camila",
+                    'apellidos': "Rojas",
+                    'especialidad': "Psicología Clínica",
+                }
+            )
+            self.stdout.write(self.style.SUCCESS(" + Usuario 'psicologa.rojas' (Profesional) creado exitosamente."))
+        else:
+            self.stdout.write(" - Usuario 'psicologa.rojas' ya existe.")
+
+        # 5. Crear Usuario Recepcionista
+        if not Usuario.objects.filter(username="recepcion").exists():
+            Usuario.objects.create_user(
+                username="recepcion",
+                email="recepcion@centronodo.cl",
+                password="recepcion1234",
+                first_name="Sofía",
+                last_name="Muñoz",
+                rol=roles["Recepcionista"],
+            )
+            self.stdout.write(self.style.SUCCESS(" + Usuario 'recepcion' (Recepcionista) creado exitosamente."))
+        else:
+            self.stdout.write(" - Usuario 'recepcion' ya existe.")
+
+        # 6. Crear Usuario Paciente
         if not Usuario.objects.filter(username="paciente.prueba").exists():
             pac_user = Usuario.objects.create_user(
                 username="paciente.prueba",
@@ -77,11 +114,12 @@ class Command(BaseCommand):
                 rol=roles["Paciente"],
             )
             paciente_obj, _ = Paciente.objects.get_or_create(
-                rut="19.876.543-2",
+                rut="19.876.543-0",
                 defaults={
                     'usuario': pac_user,
                     'nombres': "Juan",
                     'apellidos': "Pérez",
+                    'telefono': "+56 9 8765 4321",
                 }
             )
             FichaClinica.objects.get_or_create(
@@ -94,7 +132,12 @@ class Command(BaseCommand):
             )
             self.stdout.write(self.style.SUCCESS(" + Usuario 'paciente.prueba' y Ficha Clínica creados exitosamente."))
         else:
+            # Corregir RUT del paciente de prueba antiguo si tenía dígito verificador inválido
+            pac_existente = Paciente.objects.filter(rut="19.876.543-2").first()
+            if pac_existente:
+                pac_existente.rut = "19.876.543-0"
+                pac_existente.save(update_fields=['rut'])
+                self.stdout.write(" ~ RUT de 'paciente.prueba' normalizado a '19.876.543-0'.")
             self.stdout.write(" - Usuario 'paciente.prueba' ya existe.")
 
         self.stdout.write(self.style.SUCCESS("\n[LISTO] Roles y usuarios de prueba disponibles para iniciar sesión."))
-

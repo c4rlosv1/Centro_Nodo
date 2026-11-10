@@ -1,26 +1,352 @@
 {% extends 'base.html' %}
 
 {% block content %}
-<div class="hero">
-    <h2>Agendamiento de Citas</h2>
-    <p>Sistema de agendamiento en tiempo real para especialistas</p>
+<div class="page-header">
+    <div>
+        <h2>📅 Agendamiento de Citas</h2>
+        <p>Reserva de horas médicas en tiempo real con validación anti-colisiones y bloqueos de especialistas</p>
+    </div>
+    {% if user.es_staff_clinico %}
+        <div class="page-actions">
+            <a href="{% url 'paciente_crear' %}" class="btn btn-secondary">+ Nuevo Paciente</a>
+        </div>
+    {% endif %}
 </div>
 
-<div class="modules-grid">
-    <div class="module-card">
-        <h3>Programar Cita</h3>
-        <p>Agendar nuevas citas médicas con disponibilidad en tiempo real.</p>
-        <button class="btn btn-primary" onclick="alert('Función en desarrollo')">Programar</button>
+<div class="split-layout">
+    <!-- Columna Izquierda: Formularios de Nueva Cita y Bloqueo Horario -->
+    <div>
+        <div class="panel-card">
+            <h3>➕ Reservar Nueva Cita</h3>
+            <form method="POST" action="{% url 'agendamiento' %}" class="auth-form" novalidate>
+                {% csrf_token %}
+
+                <div class="form-group">
+                    <label for="{{ cita_form.paciente.id_for_label }}">{{ cita_form.paciente.label }}</label>
+                    {{ cita_form.paciente }}
+                    {% if cita_form.paciente.errors %}
+                        <span class="field-error">{{ cita_form.paciente.errors.0 }}</span>
+                    {% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label for="{{ cita_form.profesional.id_for_label }}">{{ cita_form.profesional.label }}</label>
+                    {{ cita_form.profesional }}
+                    {% if cita_form.profesional.errors %}
+                        <span class="field-error">{{ cita_form.profesional.errors.0 }}</span>
+                    {% endif %}
+                </div>
+
+                <div class="form-grid-2">
+                    <div class="form-group">
+                        <label for="{{ cita_form.fecha.id_for_label }}">{{ cita_form.fecha.label }}</label>
+                        {{ cita_form.fecha }}
+                        {% if cita_form.fecha.errors %}
+                            <span class="field-error">{{ cita_form.fecha.errors.0 }}</span>
+                        {% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label for="{{ cita_form.hora_inicio.id_for_label }}">{{ cita_form.hora_inicio.label }}</label>
+                        {{ cita_form.hora_inicio }}
+                        {% if cita_form.hora_inicio.errors %}
+                            <span class="field-error">{{ cita_form.hora_inicio.errors.0 }}</span>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <!-- Caja de Disponibilidad en Tiempo Real -->
+                <div id="availability-box" class="availability-box" style="display: none;">
+                    <strong>Horarios ocupados para esa fecha:</strong>
+                    <div id="availability-slots" class="availability-slots"></div>
+                </div>
+
+                <div class="form-group">
+                    <label for="{{ cita_form.duracion_minutos.id_for_label }}">{{ cita_form.duracion_minutos.label }}</label>
+                    {{ cita_form.duracion_minutos }}
+                </div>
+
+                <div class="form-group-checkbox">
+                    {{ cita_form.es_telemedicina }}
+                    <label for="{{ cita_form.es_telemedicina.id_for_label }}">{{ cita_form.es_telemedicina.label }}</label>
+                </div>
+
+                <button type="submit" class="btn btn-primary btn-block">Confirmar Agendamiento</button>
+            </form>
+        </div>
+
+        {% if bloqueo_form %}
+            <div class="panel-card">
+                <h3>🚫 Bloquear Horario</h3>
+                <form method="POST" action="{% url 'bloqueo_crear' %}" class="auth-form" novalidate>
+                    {% csrf_token %}
+                    <div class="form-group">
+                        <label for="{{ bloqueo_form.profesional.id_for_label }}">{{ bloqueo_form.profesional.label }}</label>
+                        {{ bloqueo_form.profesional }}
+                    </div>
+
+                    <div class="form-group">
+                        <label for="{{ bloqueo_form.fecha.id_for_label }}">{{ bloqueo_form.fecha.label }}</label>
+                        {{ bloqueo_form.fecha }}
+                    </div>
+
+                    <div class="form-grid-2">
+                        <div class="form-group">
+                            <label for="{{ bloqueo_form.hora_inicio.id_for_label }}">{{ bloqueo_form.hora_inicio.label }}</label>
+                            {{ bloqueo_form.hora_inicio }}
+                        </div>
+                        <div class="form-group">
+                            <label for="{{ bloqueo_form.hora_fin.id_for_label }}">{{ bloqueo_form.hora_fin.label }}</label>
+                            {{ bloqueo_form.hora_fin }}
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="{{ bloqueo_form.motivo.id_for_label }}">{{ bloqueo_form.motivo.label }}</label>
+                        {{ bloqueo_form.motivo }}
+                    </div>
+
+                    <button type="submit" class="btn btn-secondary btn-block">Registrar Bloqueo</button>
+                </form>
+            </div>
+        {% endif %}
     </div>
-    <div class="module-card">
-        <h3>Gestión de Pacientes</h3>
-        <p>Buscar y registrar pacientes en el sistema.</p>
-        <button class="btn btn-secondary" onclick="alert('Función en desarrollo')">Gestionar</button>
-    </div>
-    <div class="module-card">
-        <h3>Especialistas</h3>
-        <p>Ver disponibilidad de profesionales y especialidades.</p>
-        <button class="btn btn-secondary" onclick="alert('Función en desarrollo')">Ver Especialistas</button>
+
+    <!-- Columna Derecha: Listado y Filtros de Citas -->
+    <div>
+        <div class="panel-card">
+            <h3>🗓️ Agenda de Citas</h3>
+
+            <form method="GET" action="{% url 'agendamiento' %}" class="filter-bar">
+                <div class="filter-field">
+                    <label for="f_fecha">Filtrar por Fecha</label>
+                    <input type="date" id="f_fecha" name="fecha" value="{{ fecha_filtro }}" class="form-control">
+                </div>
+
+                {% if not user.es_paciente %}
+                    <div class="filter-field">
+                        <label for="f_prof">Profesional</label>
+                        <select id="f_prof" name="profesional" class="form-control">
+                            <option value="">Todos</option>
+                            {% for prof in profesionales %}
+                                <option value="{{ prof.id }}" {% if profesional_filtro == prof.id|stringformat:"s" %}selected{% endif %}>
+                                    {{ prof.apellidos }}, {{ prof.nombres }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                {% endif %}
+
+                <div class="filter-field">
+                    <label for="f_estado">Estado</label>
+                    <select id="f_estado" name="estado" class="form-control">
+                        <option value="">Todos</option>
+                        <option value="Agendada" {% if estado_filtro == 'Agendada' %}selected{% endif %}>Agendada</option>
+                        <option value="Confirmada" {% if estado_filtro == 'Confirmada' %}selected{% endif %}>Confirmada</option>
+                        <option value="En atención" {% if estado_filtro == 'En atención' %}selected{% endif %}>En atención</option>
+                        <option value="Realizada" {% if estado_filtro == 'Realizada' %}selected{% endif %}>Realizada</option>
+                        <option value="Cancelada" {% if estado_filtro == 'Cancelada' %}selected{% endif %}>Cancelada</option>
+                    </select>
+                </div>
+
+                <div class="actions-inline">
+                    <button type="submit" class="btn btn-sm btn-primary">Filtrar</button>
+                    <a href="{% url 'agendamiento' %}?ver=todas" class="btn btn-sm btn-secondary">Ver Historial</a>
+                    {% if fecha_filtro or profesional_filtro or estado_filtro or ver_todas %}
+                        <a href="{% url 'agendamiento' %}" class="btn btn-sm btn-secondary">Limpiar</a>
+                    {% endif %}
+                </div>
+            </form>
+
+            {% if citas %}
+                <div class="table-wrapper">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Fecha / Horario</th>
+                                <th>Paciente</th>
+                                <th>Profesional</th>
+                                <th>Modalidad</th>
+                                <th>Estado</th>
+                                <th>Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for c in citas %}
+                            <tr>
+                                <td>
+                                    <strong>{{ c.fechaHoraInicio|date:"d/m/Y" }}</strong><br>
+                                    <small class="timeline-meta">{{ c.fechaHoraInicio|date:"H:i" }} - {{ c.fechaHoraFin|date:"H:i" }}</small>
+                                </td>
+                                <td>
+                                    {% if user.es_staff_clinico %}
+                                        <a href="{% url 'paciente_detalle' c.paciente.id %}" style="color: var(--primary-color); text-decoration: none; font-weight: 500;">
+                                            {{ c.paciente.nombres }} {{ c.paciente.apellidos }}
+                                        </a>
+                                    {% else %}
+                                        {{ c.paciente.nombres }} {{ c.paciente.apellidos }}
+                                    {% endif %}
+                                    <br><small class="timeline-meta">{{ c.paciente.rut }}</small>
+                                </td>
+                                <td>
+                                    {{ c.profesional.nombres }} {{ c.profesional.apellidos }}<br>
+                                    <small class="timeline-meta">{{ c.profesional.especialidad }}</small>
+                                </td>
+                                <td>
+                                    {% if c.videoconsulta %}
+                                        <span class="status-badge status-confirmada">📹 Telemedicina</span>
+                                    {% else %}
+                                        <span class="status-badge status-pendiente">🏥 Presencial</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <span class="status-badge status-{{ c.estado|lower|slugify }}">{{ c.estado }}</span>
+                                </td>
+                                <td>
+                                    <div class="actions-inline">
+                                        {% if user.es_staff_clinico and c.estado != 'Cancelada' %}
+                                            {% if c.estado == 'Agendada' %}
+                                                <form method="POST" action="{% url 'cita_cambiar_estado' c.id %}">
+                                                    {% csrf_token %}
+                                                    <input type="hidden" name="estado" value="Confirmada">
+                                                    <button type="submit" class="btn btn-sm btn-success" title="Confirmar cita">Confirmar</button>
+                                                </form>
+                                            {% endif %}
+
+                                            {% if user.es_administrador or user.es_profesional %}
+                                                {% if not c.atencion_clinica and c.paciente.ficha_clinica %}
+                                                    <a href="{% url 'ficha_detalle' c.paciente.ficha_clinica.id %}?cita_id={{ c.id }}" class="btn btn-sm btn-primary" title="Registrar evolución clínica">
+                                                        📋 Atender
+                                                    </a>
+                                                {% elif c.atencion_clinica and c.paciente.ficha_clinica %}
+                                                    <a href="{% url 'ficha_detalle' c.paciente.ficha_clinica.id %}" class="btn btn-sm btn-secondary">
+                                                        Ver Ficha
+                                                    </a>
+                                                {% endif %}
+                                            {% endif %}
+                                        {% endif %}
+
+                                        {% if c.estado != 'Cancelada' and c.videoconsulta %}
+                                            {% if user.es_administrador or user.es_profesional or user.es_paciente %}
+                                                <a href="{% url 'telemedicina_sala' c.videoconsulta.id %}" class="btn btn-sm btn-secondary" title="Ingresar a sala dual de videoconsulta">
+                                                    📹 Sala
+                                                </a>
+                                            {% endif %}
+                                        {% endif %}
+
+                                        {% if c.estado != 'Cancelada' %}
+                                            {% if user.es_administrador or user.es_recepcionista %}
+                                                <a href="{% url 'caja' %}?cita_id={{ c.id }}" class="btn btn-sm btn-secondary" title="Registrar pago en caja">
+                                                    💳 Caja
+                                                </a>
+                                            {% endif %}
+                                        {% endif %}
+
+                                        {% if c.estado == 'Agendada' or c.estado == 'Confirmada' %}
+                                            <form method="POST" action="{% url 'cita_cambiar_estado' c.id %}" onsubmit="return confirm('¿Deseas cancelar esta cita?');">
+                                                {% csrf_token %}
+                                                <input type="hidden" name="estado" value="Cancelada">
+                                                <button type="submit" class="btn btn-sm btn-danger">Cancelar</button>
+                                            </form>
+                                        {% endif %}
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% else %}
+                <div class="empty-state">
+                    <p>No hay citas registradas para los filtros seleccionados.</p>
+                </div>
+            {% endif %}
+        </div>
+
+        {% if user.es_staff_clinico and bloqueos %}
+            <div class="panel-card">
+                <h3>⛔ Bloqueos Horarios Activos</h3>
+                <div class="table-wrapper">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Especialista</th>
+                                <th>Inicio</th>
+                                <th>Término</th>
+                                <th>Motivo</th>
+                                <th>Acción</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for b in bloqueos %}
+                            <tr>
+                                <td>{{ b.profesional.nombres }} {{ b.profesional.apellidos }}</td>
+                                <td>{{ b.fechaHoraInicio|date:"d/m/Y H:i" }}</td>
+                                <td>{{ b.fechaHoraFin|date:"d/m/Y H:i" }}</td>
+                                <td>{{ b.motivo|default:"Bloqueo de agenda" }}</td>
+                                <td>
+                                    <form method="POST" action="{% url 'bloqueo_eliminar' b.id %}" onsubmit="return confirm('¿Eliminar este bloqueo horario?');">
+                                        {% csrf_token %}
+                                        <button type="submit" class="btn btn-sm btn-danger">Quitar</button>
+                                    </form>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        {% endif %}
     </div>
 </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const profSelect = document.getElementById('id_cita_profesional');
+    const fechaInput = document.getElementById('id_cita_fecha');
+    const box = document.getElementById('availability-box');
+    const slotsContainer = document.getElementById('availability-slots');
+
+    async function cargarDisponibilidad() {
+        const profId = profSelect ? profSelect.value : '';
+        const fecha = fechaInput ? fechaInput.value : '';
+
+        if (!profId || !fecha) {
+            box.style.display = 'none';
+            return;
+        }
+
+        try {
+            const url = `{% url 'agendamiento_disponibilidad' %}?profesional_id=${encodeURIComponent(profId)}&fecha=${encodeURIComponent(fecha)}`;
+            const resp = await fetch(url);
+            if (!resp.ok) return;
+            const data = await resp.json();
+
+            slotsContainer.innerHTML = '';
+            if (data.ocupados && data.ocupados.length > 0) {
+                data.ocupados.forEach(item => {
+                    const pill = document.createElement('span');
+                    pill.className = 'slot-pill ' + (item.tipo === 'Bloqueo' ? 'slot-blocked' : 'slot-busy');
+                    pill.textContent = `${item.inicio} - ${item.fin} (${item.detalle})`;
+                    slotsContainer.appendChild(pill);
+                });
+            } else {
+                const freePill = document.createElement('span');
+                freePill.className = 'slot-pill slot-free';
+                freePill.textContent = 'Día completamente disponible';
+                slotsContainer.appendChild(freePill);
+            }
+            box.style.display = 'block';
+        } catch (err) {
+            console.error('Error consultando disponibilidad:', err);
+        }
+    }
+
+    if (profSelect && fechaInput) {
+        profSelect.addEventListener('change', cargarDisponibilidad);
+        fechaInput.addEventListener('change', cargarDisponibilidad);
+        cargarDisponibilidad();
+    }
+});
+</script>
 {% endblock %}

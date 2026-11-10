@@ -1,0 +1,78 @@
+{% extends 'base.html' %}
+{% load clinica_extras %}
+
+{% block content %}
+<div class="page-header no-print">
+    <div>
+        <h2>🧾 Comprobante de Pago</h2>
+        <p>Respaldo oficial emitido por Centro Nodo</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'caja' %}" class="btn btn-secondary">← Volver a Caja</a>
+        <button type="button" onclick="window.print()" class="btn btn-primary">🖨️ Imprimir / Guardar PDF</button>
+    </div>
+</div>
+
+<div class="receipt-card">
+    <div class="receipt-header">
+        <div>
+            <h2 style="margin-bottom: 0.2rem; color: var(--primary-color);">Centro Nodo</h2>
+            <p class="timeline-meta">Salud Mental Integral &bull; Manuel Antonio Matta 549, Osorno, Chile</p>
+            <p class="timeline-meta">Teléfono: +56 64 2 123 456 &bull; contacto@centronodo.cl</p>
+        </div>
+        <div style="text-align: right;">
+            <div style="font-size: 0.8rem; color: var(--text-secondary); text-transform: uppercase;">N° Comprobante</div>
+            <strong style="font-size: 1.25rem;">{{ pago.numeroComprobante|default:pago.id }}</strong><br>
+            <span class="status-badge status-{{ pago.estado|lower|slugify }}" style="margin-top: 0.35rem;">{{ pago.estado }}</span>
+        </div>
+    </div>
+
+    <div class="form-grid-2">
+        <div class="info-kv-list">
+            <div class="info-kv-item">
+                <span class="info-kv-label">Paciente</span>
+                <span class="info-kv-value">{{ pago.cita.paciente.nombres }} {{ pago.cita.paciente.apellidos }}</span>
+            </div>
+            <div class="info-kv-item">
+                <span class="info-kv-label">RUT Paciente</span>
+                <span class="info-kv-value">{{ pago.cita.paciente.rut }}</span>
+            </div>
+            <div class="info-kv-item">
+                <span class="info-kv-label">Fecha de Emisión</span>
+                <span class="info-kv-value">{{ pago.fechaPago|date:"d/m/Y H:i" }}</span>
+            </div>
+        </div>
+
+        <div class="info-kv-list">
+            <div class="info-kv-item">
+                <span class="info-kv-label">Especialista Tratante</span>
+                <span class="info-kv-value">{{ pago.cita.profesional.nombres }} {{ pago.cita.profesional.apellidos }} ({{ pago.cita.profesional.especialidad }})</span>
+            </div>
+            <div class="info-kv-item">
+                <span class="info-kv-label">Consulta Asociada</span>
+                <span class="info-kv-value">Cita #{{ pago.cita.id }} — {{ pago.cita.fechaHoraInicio|date:"d/m/Y H:i" }}</span>
+            </div>
+            <div class="info-kv-item">
+                <span class="info-kv-label">Previsión / Medio de Pago</span>
+                <span class="info-kv-value">{{ pago.prevision }} &bull; {{ pago.metodoPago }}</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="receipt-amount-box">
+        <div>
+            <span class="info-kv-label">Total del Comprobante</span>
+            <p class="timeline-meta" style="margin-top: 0.25rem;">
+                {% if pago.observaciones %}{{ pago.observaciones }}{% else %}Prestación clínica de salud mental{% endif %}
+            </p>
+        </div>
+        <div class="receipt-total">{{ pago.monto|clp }}</div>
+    </div>
+
+    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; border-top: 1px solid var(--border-color); padding-top: 1rem; font-size: 0.85rem; color: var(--text-secondary);">
+        <span>Registrado por: {% if pago.registradoPor %}{{ pago.registradoPor.get_full_name|default:pago.registradoPor.username }}{% else %}Sistema Centro Nodo{% endif %}</span>
+        <span>Comprobante interno de atención clínica (ID Pago #{{ pago.id }})</span>
+    </div>
+</div>
+{% endblock %}
+

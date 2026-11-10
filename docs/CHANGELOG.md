@@ -89,16 +89,54 @@
 - `docs/DIAGRAMA_ER_CORREGIDO.md`: Análisis técnico detallado de los errores corregidos y nuevo diagrama en notación Mermaid.
 - `docs/COMO_SUBIR_CAMBIOS_A_GITHUB.md`: Manual paso a paso para que cualquier integrante del equipo pueda confirmar y subir cambios usando la terminal o la interfaz visual de VS Code.
 
+### 12. Módulos Funcionales: Pacientes, Fichas Clínicas, Atenciones y Agendamiento Real
+- **Validación de RUT Chileno (`clinica/utils.py`):**
+  - Algoritmo Módulo 11 (`validar_rut`, `formatear_rut`, `limpiar_rut`) integrado en formularios de pacientes.
+- **Módulo de Pacientes (`clinica/views.py`, `templates/pacientes/`):**
+  - Directorio con búsqueda por RUT (con o sin puntos) y nombres.
+  - Alta y edición de pacientes, creación automática de `FichaClinica` única y creación opcional de cuenta web con rol `Paciente`.
+  - Ficha de detalle del paciente con historial de citas.
+- **Módulo de Fichas Clínicas y Atenciones (`clinica/views.py`, `templates/fichas/`):**
+  - Edición de antecedentes generales (`grupoSanguineo`, `alergias`, `antecedentesMedicos`).
+  - Línea de tiempo cronológica de `AtencionClinica` con registro directo vinculado opcionalmente a una `Cita` (actualizando la cita a estado `Realizada`).
+  - Control estricto de privacidad: `Recepcionista` no tiene acceso a fichas; `Paciente` solo ve su propia ficha sin `evolucionNotas` confidenciales.
+- **Módulo de Agendamiento Real (`clinica/views.py`, `templates/agendamiento.html`):**
+  - Validación anti-colisiones contra citas activas del profesional, bloqueos horarios (`BloqueoHorario`) y citas del paciente.
+  - Creación automática de sala `Videoconsulta` al marcar modalidad Telemedicina.
+  - Gestión de estados (`Agendada`, `Confirmada`, `Realizada`, `Cancelada`) y bloqueos horarios.
+  - Endpoint JSON `/agendamiento/disponibilidad/` para mostrar horarios ocupados/bloqueados en tiempo real.
+- **Dashboard Dinámico y Telemedicina (`templates/dashboard.html`, `templates/telemedicina.html`):**
+  - Métricas reales por rol y listado de videoconsultas programadas.
+  - Zona horaria configurada a `America/Santiago` en `core/settings.py`.
+- **Pruebas Automatizadas (`clinica/tests.py`):**
+  - 7 pruebas unitarias y de integración cubriendo RUT, RBAC, fichas y colisiones de agenda (`manage.py test clinica`).
+
+### 13. Cifrado en Reposo, Dashboards por Rol, Telemedicina Dual y Caja/Liquidaciones (Partes 3 y 4)
+- **Cifrado Simétrico en Reposo (`clinica/crypto.py`, `clinica/fields.py`, `core/settings.py`):**
+  - Implementación de `EncryptedTextField` basado en `cryptography.fernet` (AES-128-CBC + HMAC-SHA256) usando `CLINICAL_ENCRYPTION_KEY` (con respaldo en `SECRET_KEY` y prefijo `enc::`).
+  - Cifrado transparente de `FichaClinica` (`antecedentesMedicos`, `alergias`) y `AtencionClinica` (`motivoConsulta`, `diagnostico`, `evolucionNotas`, `indicacionesTratamiento`), manteniendo compatibilidad con texto legado sin prefijo.
+  - Ajuste en `clinica/admin.py` retirando columnas cifradas de `search_fields`.
+- **Dashboards Diferenciados por Rol (`clinica/views.py`, `templates/dashboard.html`):**
+  - **Profesional:** citas de hoy, atenciones registradas, pendientes de cierre/evolución clínica y salas de telemedicina activas.
+  - **Paciente:** próxima consulta destacada con acceso directo a videoconsulta, sesiones realizadas, pagos pendientes y últimas indicaciones (ocultando estrictamente `evolucionNotas`).
+  - **Administrador / Recepcionista:** agenda del día con confirmación rápida, pacientes registrados, recaudación del día/mes y citas pendientes de cobro.
+- **Entorno Dual de Telemedicina (`clinica/views.py`, `templates/telemedicina_sala.html`, `core/urls.py`):**
+  - Panel izquierdo con videollamada **WebRTC Peer-to-Peer**, sala de espera virtual (`Pendiente` → `En espera` → `En curso` → `Finalizada`), controles de micrófono, cámara y compartir pantalla, más señalización SDP Offer/Answer e ICE Candidates vía `django.core.cache` (`/telemedicina/sala/<id>/senal/`).
+  - Panel derecho con ficha clínica continua y guardado en vivo vía **AJAX** (`X-Requested-With: XMLHttpRequest`) para que el especialista registre y cifre evoluciones sin cortar la videollamada, y botón de cierre/finalización de sesión.
+- **Módulo de Caja, Pagos y Liquidaciones (`clinica/models.py`, `clinica/forms.py`, `clinica/views.py`, `templates/caja/`):**
+  - Ampliación del modelo `Pago` (migración `0004`) con `prevision`, `metodoPago`, `numeroComprobante`, `observaciones` y `registradoPor`.
+  - Registro de cobros con correlativo automático de comprobante (`CMP-YYYYMMDD-XXXX`), cambios de estado (`Pagado` / `Pendiente` / `Anulado`), detección de citas sin cobro, cuadratura por medio de pago, cálculo configurable de comisión/liquidación líquida para especialistas y exportación a CSV (`;`, UTF-8 BOM para Excel).
+  - Comprobante de pago imprimible y exportable a PDF desde el navegador (`templates/caja/comprobante.html` con reglas `@media print` en `static/css/style.css`).
+  - Filtro de formato monetario chileno `|clp` en `clinica/templatetags/clinica_extras.py`.
+
 
 ---
 
 ## 🔍 Verificación Realizada
-- **Migraciones:** Todas las migraciones iniciales (`admin`, `auth`, `clinica`, `contenttypes`, `sessions`) fueron aplicadas exitosamente sobre la base de datos.
+- **Migraciones:** Todas las migraciones (`0001` a `0004` de `clinica` + `admin`, `auth`, `contenttypes`, `sessions`) aplicadas exitosamente.
 - **Pruebas Automatizadas:**
   - Bloqueo de usuarios anónimos en rutas privadas (redirección a login): **OK**.
-  - Login con username: **OK**.
-  - Login con email: **OK**.
-  - Creación de sesión y renderizado de usuario autenticado: **OK**.
-  - Cierre de sesión y destrucción de sesión: **OK**.
-  - Generación de token y correo de restablecimiento de contraseña: **OK**.
+  - Login con username y con email, cierre de sesión y reseteo de contraseña: **OK**.
+  - Suite completa `python manage.py test clinica -v 2` (**12 pruebas** cubriendo RUT, Pacientes, Fichas/RBAC, Agendamiento anti-colisiones, Bloqueos, Atenciones, Cifrado en reposo en BD cruda, Dashboards por rol, Telemedicina Dual/AJAX/WebRTC y Caja/Liquidaciones/Comprobante/CSV): **OK**.
+
 

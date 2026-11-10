@@ -62,8 +62,9 @@ class VideoconsultaAdmin(admin.ModelAdmin):
 
 @admin.register(Pago)
 class PagoAdmin(admin.ModelAdmin):
-    list_display = ('id', 'cita', 'monto', 'estado', 'fechaPago')
-    list_filter = ('estado',)
+    list_display = ('id', 'cita', 'monto', 'prevision', 'metodoPago', 'estado', 'numeroComprobante', 'fechaPago')
+    list_filter = ('estado', 'metodoPago', 'prevision')
+    search_fields = ('numeroComprobante', 'cita__paciente__rut', 'cita__paciente__apellidos')
 
 
 class AtencionClinicaInline(admin.StackedInline):
@@ -80,6 +81,7 @@ class FichaClinicaAdmin(admin.ModelAdmin):
 
 @admin.register(AtencionClinica)
 class AtencionClinicaAdmin(admin.ModelAdmin):
-    list_display = ('id', 'fichaClinica', 'profesional', 'fechaHora', 'motivoConsulta')
+    list_display = ('id', 'fichaClinica', 'profesional', 'fechaHora')
     list_filter = ('profesional',)
-    search_fields = ('fichaClinica__paciente__rut', 'motivoConsulta', 'diagnostico')
+    search_fields = ('fichaClinica__paciente__rut', 'fichaClinica__paciente__nombres', 'fichaClinica__paciente__apellidos')
+

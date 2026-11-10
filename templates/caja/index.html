@@ -1,0 +1,285 @@
+{% extends 'base.html' %}
+{% load clinica_extras %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h2>
+            {% if puede_cobrar %}💳 Caja, Pagos y Liquidaciones
+            {% elif user.es_profesional %}💰 Mis Honorarios y Liquidación
+            {% else %}🧾 Mis Pagos y Comprobantes{% endif %}
+        </h2>
+        <p>
+            {% if puede_cobrar %}
+                Registro de pagos por consulta, cuadratura diaria y cálculo de honorarios médicos
+            {% elif user.es_profesional %}
+                Resumen de atenciones cobradas y liquidación neta de honorarios
+            {% else %}
+                Historial de pagos realizados e impresión de comprobantes
+            {% endif %}
+        </p>
+    </div>
+    {% if not user.es_paciente %}
+        <div class="page-actions">
+            <a href="{% url 'caja_exportar_csv' %}?fecha={{ fecha_filtro|urlencode }}&estado={{ estado_filtro|urlencode }}&metodo={{ metodo_filtro|urlencode }}" class="btn btn-secondary">
+                📥 Exportar CSV (Excel)
+            </a>
+        </div>
+    {% endif %}
+</div>
+
+<!-- Métricas de Caja -->
+<div class="stats-grid">
+    <div class="stat-card">
+        <span class="stat-label">{% if user.es_paciente %}Pagado Hoy{% else %}Ingresos Pagados Hoy{% endif %}</span>
+        <span class="stat-value">{{ total_hoy|clp }}</span>
+    </div>
+    <div class="stat-card">
+        <span class="stat-label">{% if user.es_paciente %}Pagado este Mes{% else %}Ingresos del Mes{% endif %}</span>
+        <span class="stat-value">{{ total_mes|clp }}</span>
+    </div>
+    <div class="stat-card">
+        <span class="stat-label">Pagos Pendientes ({{ pendientes_count }})</span>
+        <span class="stat-value">{{ pendientes_total|clp }}</span>
+    </div>
+    {% if puede_cobrar %}
+        <div class="stat-card">
+            <span class="stat-label">Citas sin Cobro Registrado</span>
+            <span class="stat-value">{{ citas_sin_pago|length }}</span>
+        </div>
+    {% endif %}
+</div>
+
+{% if puede_cobrar %}
+<div class="split-layout">
+    <!-- Columna Izquierda: Formulario de Cobro + Citas sin Pago -->
+    <div>
+        <div class="panel-card">
+            <h3>➕ Registrar Pago / Copago</h3>
+            <form method="POST" action="{% url 'caja' %}" class="auth-form" novalidate>
+                {% csrf_token %}
+
+                {% for field in pago_form %}
+                    <div class="form-group">
+                        <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+                        {{ field }}
+                        {% if field.errors %}
+                            <span class="field-error">{{ field.errors.0 }}</span>
+                        {% endif %}
+                    </div>
+                {% endfor %}
+
+                <button type="submit" class="btn btn-primary btn-block">Registrar en Caja</button>
+            </form>
+        </div>
+
+        {% if citas_sin_pago %}
+            <div class="panel-card">
+                <h3>⏳ Citas Pendientes de Cobro</h3>
+                <div class="info-kv-list">
+                    {% for c in citas_sin_pago %}
+                        <div class="info-kv-item" style="flex-direction: row; justify-content: space-between; align-items: center; gap: 0.75rem;">
+                            <div>
+                                <strong>{{ c.paciente.nombres }} {{ c.paciente.apellidos }}</strong><br>
+                                <small class="timeline-meta">
+                                    {{ c.fechaHoraInicio|date:"d/m H:i" }} &bull; {{ c.profesional.apellidos }} ({{ c.estado }})
+                                </small>
+                            </div>
+                            <a href="{% url 'caja' %}?cita_id={{ c.id }}" class="btn btn-sm btn-primary">Cobrar</a>
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+        {% endif %}
+    </div>
+
+    <!-- Columna Derecha: Historial, Cuadratura y Liquidaciones -->
+    <div>
+{% endif %}
+
+        <!-- Filtros y Listado de Pagos -->
+        <div class="panel-card">
+            <h3>🧾 Movimientos de Caja ({{ pagos.count }})</h3>
+
+            <form method="GET" action="{% url 'caja' %}" class="filter-bar">
+                <div class="filter-field">
+                    <label for="f_fecha">Fecha de Pago</label>
+                    <input type="date" id="f_fecha" name="fecha" value="{{ fecha_filtro }}" class="form-control">
+                </div>
+                <div class="filter-field">
+                    <label for="f_estado">Estado</label>
+                    <select id="f_estado" name="estado" class="form-control">
+                        <option value="">Todos</option>
+                        <option value="Pagado" {% if estado_filtro == 'Pagado' %}selected{% endif %}>Pagado</option>
+                        <option value="Pendiente" {% if estado_filtro == 'Pendiente' %}selected{% endif %}>Pendiente</option>
+                        <option value="Anulado" {% if estado_filtro == 'Anulado' %}selected{% endif %}>Anulado</option>
+                    </select>
+                </div>
+                <div class="filter-field">
+                    <label for="f_metodo">Medio de Pago</label>
+                    <select id="f_metodo" name="metodo" class="form-control">
+                        <option value="">Todos</option>
+                        <option value="Transferencia" {% if metodo_filtro == 'Transferencia' %}selected{% endif %}>Transferencia</option>
+                        <option value="Débito" {% if metodo_filtro == 'Débito' %}selected{% endif %}>Débito</option>
+                        <option value="Crédito" {% if metodo_filtro == 'Crédito' %}selected{% endif %}>Crédito</option>
+                        <option value="Efectivo" {% if metodo_filtro == 'Efectivo' %}selected{% endif %}>Efectivo</option>
+                        <option value="Bono Fonasa" {% if metodo_filtro == 'Bono Fonasa' %}selected{% endif %}>Bono Fonasa</option>
+                    </select>
+                </div>
+                {% if not user.es_paciente %}
+                    <div class="filter-field">
+                        <label for="f_comision">% Comisión Centro</label>
+                        <select id="f_comision" name="comision" class="form-control">
+                            <option value="20" {% if comision_pct == 20 %}selected{% endif %}>20% Centro / 80% Especialista</option>
+                            <option value="25" {% if comision_pct == 25 %}selected{% endif %}>25% Centro / 75% Especialista</option>
+                            <option value="30" {% if comision_pct == 30 %}selected{% endif %}>30% Centro / 70% Especialista</option>
+                            <option value="35" {% if comision_pct == 35 %}selected{% endif %}>35% Centro / 65% Especialista</option>
+                            <option value="40" {% if comision_pct == 40 %}selected{% endif %}>40% Centro / 60% Especialista</option>
+                        </select>
+                    </div>
+                {% endif %}
+                <div class="actions-inline">
+                    <button type="submit" class="btn btn-sm btn-primary">Filtrar</button>
+                    {% if fecha_filtro or estado_filtro or metodo_filtro or comision_pct != 30 %}
+                        <a href="{% url 'caja' %}" class="btn btn-sm btn-secondary">Limpiar</a>
+                    {% endif %}
+                </div>
+            </form>
+
+            {% if pagos %}
+                <div class="table-wrapper">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Comprobante</th>
+                                <th>Fecha</th>
+                                <th>Paciente</th>
+                                <th>Profesional</th>
+                                <th>Previsión / Medio</th>
+                                <th>Monto</th>
+                                <th>Estado</th>
+                                <th>Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for p in pagos %}
+                            <tr>
+                                <td><code>{{ p.numeroComprobante|default:p.id }}</code></td>
+                                <td>{{ p.fechaPago|date:"d/m/Y H:i" }}</td>
+                                <td>
+                                    {{ p.cita.paciente.nombres }} {{ p.cita.paciente.apellidos }}<br>
+                                    <small class="timeline-meta">{{ p.cita.paciente.rut }}</small>
+                                </td>
+                                <td>{{ p.cita.profesional.nombres }} {{ p.cita.profesional.apellidos }}</td>
+                                <td>
+                                    <strong>{{ p.metodoPago }}</strong><br>
+                                    <small class="timeline-meta">{{ p.prevision }}</small>
+                                </td>
+                                <td><strong>{{ p.monto|clp }}</strong></td>
+                                <td><span class="status-badge status-{{ p.estado|lower|slugify }}">{{ p.estado }}</span></td>
+                                <td>
+                                    <div class="actions-inline">
+                                        <a href="{% url 'pago_comprobante' p.id %}" class="btn btn-sm btn-secondary">🧾 Comprobante</a>
+                                        {% if puede_cobrar %}
+                                            {% if p.estado == 'Pendiente' %}
+                                                <form method="POST" action="{% url 'pago_cambiar_estado' p.id %}">
+                                                    {% csrf_token %}
+                                                    <input type="hidden" name="estado" value="Pagado">
+                                                    <button type="submit" class="btn btn-sm btn-success">Confirmar</button>
+                                                </form>
+                                            {% endif %}
+                                            {% if p.estado != 'Anulado' %}
+                                                <form method="POST" action="{% url 'pago_cambiar_estado' p.id %}" onsubmit="return confirm('¿Anular este registro de pago?');">
+                                                    {% csrf_token %}
+                                                    <input type="hidden" name="estado" value="Anulado">
+                                                    <button type="submit" class="btn btn-sm btn-danger">Anular</button>
+                                                </form>
+                                            {% endif %}
+                                        {% endif %}
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% else %}
+                <div class="empty-state">
+                    <p>No existen pagos registrados para los filtros seleccionados.</p>
+                </div>
+            {% endif %}
+        </div>
+
+        {% if not user.es_paciente %}
+            <!-- Cuadratura por Medio de Pago -->
+            <div class="panel-card">
+                <h3>📊 Cuadratura por Medio de Pago (Pagados)</h3>
+                {% if desglose_metodos %}
+                    <div class="table-wrapper">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Medio de Pago</th>
+                                    <th>Cantidad de Transacciones</th>
+                                    <th>Total Recaudado</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in desglose_metodos %}
+                                <tr>
+                                    <td><strong>{{ item.metodoPago }}</strong></td>
+                                    <td>{{ item.cantidad }}</td>
+                                    <td><strong>{{ item.total|clp }}</strong></td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <p class="timeline-meta">No hay ingresos pagados en el filtro actual.</p>
+                {% endif %}
+            </div>
+
+            <!-- Liquidación de Honorarios Médicos -->
+            <div class="panel-card">
+                <h3>💼 Liquidación de Honorarios (Comisión Centro {{ comision_pct }}%)</h3>
+                {% if liquidaciones %}
+                    <div class="table-wrapper">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Especialista</th>
+                                    <th>Consultas Pagadas</th>
+                                    <th>Monto Bruto</th>
+                                    <th>Comisión Centro ({{ comision_pct }}%)</th>
+                                    <th>Líquido Especialista</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for liq in liquidaciones %}
+                                <tr>
+                                    <td>
+                                        <strong>{{ liq.profesional.nombres }} {{ liq.profesional.apellidos }}</strong><br>
+                                        <small class="timeline-meta">{{ liq.profesional.especialidad }}</small>
+                                    </td>
+                                    <td>{{ liq.cantidad_citas }}</td>
+                                    <td>{{ liq.monto_bruto|clp }}</td>
+                                    <td>{{ liq.comision_centro|clp }}</td>
+                                    <td><strong style="color: #4ade80;">{{ liq.liquido_profesional|clp }}</strong></td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <p class="timeline-meta">No hay pagos confirmados para calcular liquidaciones.</p>
+                {% endif %}
+            </div>
+        {% endif %}
+
+{% if puede_cobrar %}
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+

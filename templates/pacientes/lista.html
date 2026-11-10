@@ -1,0 +1,73 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h2>👥 Gestión de Pacientes</h2>
+        <p>Directorio clínico de pacientes registrados en Centro Nodo</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'paciente_crear' %}" class="btn btn-primary">+ Nuevo Paciente</a>
+    </div>
+</div>
+
+<div class="panel-card">
+    <form method="GET" action="{% url 'pacientes_lista' %}" class="search-bar">
+        <input type="text" name="q" value="{{ query }}" class="form-control" placeholder="Buscar por RUT, nombre o apellido...">
+        <button type="submit" class="btn btn-primary">Buscar</button>
+        {% if query %}
+            <a href="{% url 'pacientes_lista' %}" class="btn btn-secondary">Limpiar</a>
+        {% endif %}
+    </form>
+
+    {% if pacientes %}
+        <div class="table-wrapper">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>RUT</th>
+                        <th>Nombre Completo</th>
+                        <th>Teléfono</th>
+                        <th>Acceso Web</th>
+                        <th>Citas</th>
+                        <th>Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for p in pacientes %}
+                    <tr>
+                        <td><strong>{{ p.rut }}</strong></td>
+                        <td>{{ p.apellidos }}, {{ p.nombres }}</td>
+                        <td>{{ p.telefono|default:"—" }}</td>
+                        <td>
+                            {% if p.usuario %}
+                                <span class="status-badge status-realizada">{{ p.usuario.email }}</span>
+                            {% else %}
+                                <span class="status-badge status-pendiente">Presencial</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ p.total_citas }}</td>
+                        <td>
+                            <div class="actions-inline">
+                                <a href="{% url 'paciente_detalle' p.id %}" class="btn btn-sm btn-secondary">Ver</a>
+                                <a href="{% url 'paciente_editar' p.id %}" class="btn btn-sm btn-secondary">Editar</a>
+                                {% if user.es_administrador or user.es_profesional %}
+                                    {% if p.ficha_clinica %}
+                                        <a href="{% url 'ficha_detalle' p.ficha_clinica.id %}" class="btn btn-sm btn-primary">Ficha</a>
+                                    {% endif %}
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    {% else %}
+        <div class="empty-state">
+            <p>{% if query %}No se encontraron pacientes que coincidan con "{{ query }}".{% else %}Aún no hay pacientes registrados.{% endif %}</p>
+        </div>
+    {% endif %}
+</div>
+{% endblock %}
+

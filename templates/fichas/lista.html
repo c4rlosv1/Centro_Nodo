@@ -1,0 +1,63 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h2>📋 Fichas Clínicas Electrónicas</h2>
+        <p>Expedientes médicos únicos por paciente y sus evoluciones clínicas</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'pacientes_lista' %}" class="btn btn-secondary">Directorio de Pacientes</a>
+    </div>
+</div>
+
+<div class="panel-card">
+    <form method="GET" action="{% url 'fichas_lista' %}" class="search-bar">
+        <input type="text" name="q" value="{{ query }}" class="form-control" placeholder="Buscar ficha por RUT o nombre del paciente...">
+        <button type="submit" class="btn btn-primary">Buscar</button>
+        {% if query %}
+            <a href="{% url 'fichas_lista' %}" class="btn btn-secondary">Limpiar</a>
+        {% endif %}
+    </form>
+
+    {% if fichas %}
+        <div class="table-wrapper">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>N° Ficha</th>
+                        <th>Paciente</th>
+                        <th>RUT</th>
+                        <th>Grupo Sanguíneo</th>
+                        <th>Atenciones</th>
+                        <th>Apertura</th>
+                        <th>Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for f in fichas %}
+                    <tr>
+                        <td><strong>#{{ f.id }}</strong></td>
+                        <td>{{ f.paciente.apellidos }}, {{ f.paciente.nombres }}</td>
+                        <td>{{ f.paciente.rut }}</td>
+                        <td>{{ f.grupoSanguineo|default:"—" }}</td>
+                        <td>
+                            <span class="status-badge status-agendada">{{ f.total_atenciones }} registro(s)</span>
+                        </td>
+                        <td>{{ f.fechaCreacion|date:"d/m/Y" }}</td>
+                        <td>
+                            <a href="{% url 'ficha_detalle' f.id %}" class="btn btn-sm btn-primary">Abrir Expediente</a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    {% else %}
+        <div class="empty-state">
+            <p>{% if query %}No se encontraron fichas para "{{ query }}".{% else %}Aún no hay fichas clínicas registradas.{% endif %}</p>
+        </div>
+    {% endif %}
+</div>
+{% endblock %}
+

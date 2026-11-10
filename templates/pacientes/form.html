@@ -1,0 +1,121 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h2>{{ titulo }}</h2>
+        <p>Complete la información del paciente. El RUT se valida automáticamente con Módulo 11.</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% if es_edicion %}{% url 'paciente_detalle' paciente.id %}{% else %}{% url 'pacientes_lista' %}{% endif %}" class="btn btn-secondary">← Volver</a>
+    </div>
+</div>
+
+<div class="panel-card" style="max-width: 720px; margin: 0 auto;">
+    <form method="POST" class="auth-form" novalidate>
+        {% csrf_token %}
+
+        {% if form.non_field_errors %}
+            <div class="alert alert-error">
+                <span>⚠️ {{ form.non_field_errors.0 }}</span>
+            </div>
+        {% endif %}
+
+        <div class="form-grid-2">
+            <div class="form-group">
+                <label for="{{ form.rut.id_for_label }}">{{ form.rut.label }}</label>
+                {{ form.rut }}
+                {% if form.rut.errors %}
+                    <span class="field-error">{{ form.rut.errors.0 }}</span>
+                {% endif %}
+            </div>
+
+            <div class="form-group">
+                <label for="{{ form.telefono.id_for_label }}">{{ form.telefono.label }}</label>
+                {{ form.telefono }}
+                {% if form.telefono.errors %}
+                    <span class="field-error">{{ form.telefono.errors.0 }}</span>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="form-grid-2">
+            <div class="form-group">
+                <label for="{{ form.nombres.id_for_label }}">{{ form.nombres.label }}</label>
+                {{ form.nombres }}
+                {% if form.nombres.errors %}
+                    <span class="field-error">{{ form.nombres.errors.0 }}</span>
+                {% endif %}
+            </div>
+
+            <div class="form-group">
+                <label for="{{ form.apellidos.id_for_label }}">{{ form.apellidos.label }}</label>
+                {{ form.apellidos }}
+                {% if form.apellidos.errors %}
+                    <span class="field-error">{{ form.apellidos.errors.0 }}</span>
+                {% endif %}
+            </div>
+        </div>
+
+        {% if form.crear_cuenta_web %}
+            <div style="border-top: 1px solid var(--border-color); padding-top: 1.25rem; margin-top: 0.5rem;">
+                <div class="form-group-checkbox">
+                    {{ form.crear_cuenta_web }}
+                    <label for="{{ form.crear_cuenta_web.id_for_label }}">{{ form.crear_cuenta_web.label }}</label>
+                </div>
+
+                <div id="cuenta-web-fields" class="form-grid-2" style="margin-top: 1rem; display: none;">
+                    <div class="form-group">
+                        <label for="{{ form.email_cuenta.id_for_label }}">{{ form.email_cuenta.label }}</label>
+                        {{ form.email_cuenta }}
+                        {% if form.email_cuenta.errors %}
+                            <span class="field-error">{{ form.email_cuenta.errors.0 }}</span>
+                        {% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label for="{{ form.password_inicial.id_for_label }}">{{ form.password_inicial.label }}</label>
+                        {{ form.password_inicial }}
+                        {% if form.password_inicial.errors %}
+                            <span class="field-error">{{ form.password_inicial.errors.0 }}</span>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        {% endif %}
+
+        <div class="actions-inline" style="margin-top: 1rem; justify-content: flex-end;">
+            <a href="{% if es_edicion %}{% url 'paciente_detalle' paciente.id %}{% else %}{% url 'pacientes_lista' %}{% endif %}" class="btn btn-secondary">Cancelar</a>
+            <button type="submit" class="btn btn-primary">{% if es_edicion %}Guardar Cambios{% else %}Registrar Paciente{% endif %}</button>
+        </div>
+    </form>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const checkCuenta = document.getElementById('id_crear_cuenta_web');
+    const bloqueCuenta = document.getElementById('cuenta-web-fields');
+    if (checkCuenta && bloqueCuenta) {
+        const toggle = () => {
+            bloqueCuenta.style.display = checkCuenta.checked ? 'grid' : 'none';
+        };
+        checkCuenta.addEventListener('change', toggle);
+        toggle();
+    }
+
+    const inputRut = document.getElementById('id_rut');
+    if (inputRut) {
+        inputRut.addEventListener('blur', function() {
+            let val = this.value.replace(/[^0-9kK]/g, '').toUpperCase();
+            if (val.length >= 2) {
+                const cuerpo = val.slice(0, -1);
+                const dv = val.slice(-1);
+                const cuerpoConPuntos = cuerpo.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+                this.value = cuerpoConPuntos + '-' + dv;
+            }
+        });
+    }
+});
+</script>
+{% endblock %}
+

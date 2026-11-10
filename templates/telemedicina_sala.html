@@ -1,0 +1,527 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="page-header no-print">
+    <div>
+        <h2>📹 Sala Dual de Telemedicina</h2>
+        <p>
+            Sala <code>{{ videoconsulta.urlSalaWebRTC }}</code> &bull;
+            {{ cita.fechaHoraInicio|date:"d/m/Y H:i" }} - {{ cita.fechaHoraFin|date:"H:i" }} &bull;
+            {% if es_clinico %}
+                Paciente: <strong>{{ paciente.nombres }} {{ paciente.apellidos }}</strong> ({{ paciente.rut }})
+            {% else %}
+                Especialista: <strong>{{ profesional.nombres }} {{ profesional.apellidos }}</strong> ({{ profesional.especialidad }})
+            {% endif %}
+        </p>
+    </div>
+    <div class="page-actions">
+        <span id="sala-estado-badge" class="status-badge status-{{ videoconsulta.estadoConexion|lower|slugify }}">
+            {{ videoconsulta.estadoConexion }}
+        </span>
+        <a href="{% url 'telemedicina' %}" class="btn btn-secondary">← Volver a Salas</a>
+    </div>
+</div>
+
+<div class="telemed-grid">
+    <!-- PANEL IZQUIERDO: VIDEOCONSULTA WEBRTC P2P -->
+    <div class="panel-card">
+        <div class="page-header" style="margin-bottom: 1rem; padding-bottom: 0.75rem;">
+            <div>
+                <h3 style="margin-bottom: 0;">🎥 Videollamada Segura (WebRTC P2P)</h3>
+            </div>
+            <small id="peer-presence-text" class="timeline-meta">Iniciando señalización...</small>
+        </div>
+
+        <div class="video-stage">
+            <span id="call-status-pill" class="call-status-pill">Estado: {{ videoconsulta.estadoConexion }}</span>
+            <div id="video-placeholder" class="video-placeholder">
+                <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">📡</div>
+                <strong id="placeholder-title">Conectando con la sala de videoconsulta...</strong>
+                <p id="placeholder-subtitle" style="margin-top: 0.4rem; max-width: 420px; font-size: 0.9rem;">
+                    {% if es_clinico %}
+                        Esperando conexión de video del paciente {{ paciente.nombres }} {{ paciente.apellidos }}. Puedes escribir notas clínicas en el panel derecho sin interrumpir la sesión.
+                    {% else %}
+                        Estás en la sala de espera virtual. El especialista iniciará la consulta en unos momentos.
+                    {% endif %}
+                </p>
+            </div>
+            <video id="remote-video" class="video-remote" autoplay playsinline></video>
+            <video id="local-video" class="video-local-pip" autoplay playsinline muted></video>
+        </div>
+
+        <div class="video-controls">
+            <button type="button" id="btn-mic" class="btn-control">🎤 Silenciar Mic</button>
+            <button type="button" id="btn-cam" class="btn-control">📷 Apagar Cámara</button>
+            <button type="button" id="btn-screen" class="btn-control">🖥️ Compartir Pantalla</button>
+            <button type="button" id="btn-reconnect" class="btn-control">🔄 Reconectar P2P</button>
+        </div>
+
+        {% if es_clinico %}
+            <div class="actions-inline" style="margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid var(--border-color); justify-content: space-between;">
+                <div class="actions-inline">
+                    <form method="POST" action="{% url 'telemedicina_estado' videoconsulta.id %}">
+                        {% csrf_token %}
+                        <input type="hidden" name="estadoConexion" value="En curso">
+                        <button type="submit" class="btn btn-sm btn-success">✅ Admitir / Sesión En Curso</button>
+                    </form>
+                    <form method="POST" action="{% url 'telemedicina_estado' videoconsulta.id %}">
+                        {% csrf_token %}
+                        <input type="hidden" name="estadoConexion" value="Finalizada">
+                        <button type="submit" class="btn btn-sm btn-danger">⏹️ Finalizar Videoconsulta</button>
+                    </form>
+                </div>
+                <button type="button" id="btn-reset-signal" class="btn btn-sm btn-secondary" title="Reiniciar negociación WebRTC">
+                    Reiniciar Señal
+                </button>
+            </div>
+        {% endif %}
+    </div>
+
+    <!-- PANEL DERECHO: NOTAS CLÍNICAS CONTINUAS (CLÍNICO) / SALA DE ESPERA E INDICACIONES (PACIENTE) -->
+    <div>
+        {% if es_clinico %}
+            <div class="panel-card">
+                <div class="page-header" style="margin-bottom: 1rem; padding-bottom: 0.75rem;">
+                    <div>
+                        <h3 style="margin-bottom: 0;">📝 Notas Clínicas en Vivo</h3>
+                    </div>
+                    <span class="badge-encrypted">🔐 Cifrado en reposo</span>
+                </div>
+
+                <div class="patient-strip">
+                    <div>
+                        <strong>{{ paciente.nombres }} {{ paciente.apellidos }}</strong> &bull; RUT: <code>{{ paciente.rut }}</code>
+                    </div>
+                    <div style="margin-top: 0.35rem;">
+                        <strong>Alergias:</strong> {{ ficha.alergias|default:"Ninguna registrada" }}
+                    </div>
+                    {% if ficha.antecedentesMedicos %}
+                        <div style="margin-top: 0.25rem;">
+                            <strong>Antecedentes:</strong> {{ ficha.antecedentesMedicos|truncatechars:140 }}
+                        </div>
+                    {% endif %}
+                    <div style="margin-top: 0.5rem;">
+                        <a href="{% url 'ficha_detalle' ficha.id %}" style="color: var(--primary-color); font-size: 0.85rem; font-weight: 600;">
+                            Abrir Expediente Completo →
+                        </a>
+                    </div>
+                </div>
+
+                {% if atenciones_previas %}
+                    <details class="details-collapse">
+                        <summary>🕒 Ver Atenciones Previas ({{ atenciones_previas|length }})</summary>
+                        <div style="margin-top: 0.75rem; display: flex; flex-direction: column; gap: 0.75rem;">
+                            {% for prev in atenciones_previas %}
+                                <div style="padding-bottom: 0.65rem; border-bottom: 1px solid var(--border-color); font-size: 0.85rem;">
+                                    <strong>{{ prev.fechaHora|date:"d/m/Y" }}</strong> — {{ prev.profesional.nombres }} {{ prev.profesional.apellidos }}<br>
+                                    <em>Diagnóstico:</em> {{ prev.diagnostico }}
+                                    {% if prev.indicacionesTratamiento %}
+                                        <br><em>Indicaciones:</em> {{ prev.indicacionesTratamiento }}
+                                    {% endif %}
+                                    {% if prev.evolucionNotas %}
+                                        <br><em>Notas:</em> {{ prev.evolucionNotas|truncatechars:160 }}
+                                    {% endif %}
+                                </div>
+                            {% endfor %}
+                        </div>
+                    </details>
+                {% endif %}
+
+                <form id="live-notes-form" method="POST" action="{% url 'telemedicina_sala' videoconsulta.id %}" class="auth-form">
+                    {% csrf_token %}
+                    <input type="hidden" name="cita" value="{{ cita.id }}">
+
+                    <div class="form-group">
+                        <label for="{{ atencion_form.profesional.id_for_label }}">{{ atencion_form.profesional.label }}</label>
+                        {{ atencion_form.profesional }}
+                    </div>
+
+                    <div class="form-group">
+                        <label for="{{ atencion_form.motivoConsulta.id_for_label }}">{{ atencion_form.motivoConsulta.label }}</label>
+                        {{ atencion_form.motivoConsulta }}
+                        {% if atencion_form.motivoConsulta.errors %}
+                            <span class="field-error">{{ atencion_form.motivoConsulta.errors.0 }}</span>
+                        {% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label for="{{ atencion_form.diagnostico.id_for_label }}">{{ atencion_form.diagnostico.label }}</label>
+                        {{ atencion_form.diagnostico }}
+                        {% if atencion_form.diagnostico.errors %}
+                            <span class="field-error">{{ atencion_form.diagnostico.errors.0 }}</span>
+                        {% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label for="{{ atencion_form.evolucionNotas.id_for_label }}">{{ atencion_form.evolucionNotas.label }}</label>
+                        {{ atencion_form.evolucionNotas }}
+                    </div>
+
+                    <div class="form-group">
+                        <label for="{{ atencion_form.indicacionesTratamiento.id_for_label }}">{{ atencion_form.indicacionesTratamiento.label }}</label>
+                        {{ atencion_form.indicacionesTratamiento }}
+                    </div>
+
+                    <div id="ajax-save-status" class="ajax-save-status">
+                        {% if atencion_existente %}
+                            <span style="color: var(--text-secondary);">Nota clínica vinculada a esta sesión (ID #{{ atencion_existente.id }}).</span>
+                        {% endif %}
+                    </div>
+
+                    <div class="actions-inline" style="justify-content: space-between;">
+                        <button type="button" id="btn-save-live" class="btn btn-primary">
+                            💾 Guardar sin Cortar Video
+                        </button>
+                        <button type="submit" name="accion_nota" value="finalizar" class="btn btn-success">
+                            ✅ Guardar y Finalizar Sesión
+                        </button>
+                    </div>
+                </form>
+            </div>
+        {% else %}
+            <!-- VISTA PACIENTE EN SALA DUAL -->
+            <div class="panel-card">
+                <h3>🛋️ Sala de Espera y Consulta</h3>
+                <div class="info-kv-list">
+                    <div class="info-kv-item">
+                        <span class="info-kv-label">Especialista</span>
+                        <span class="info-kv-value">{{ profesional.nombres }} {{ profesional.apellidos }} ({{ profesional.especialidad }})</span>
+                    </div>
+                    <div class="info-kv-item">
+                        <span class="info-kv-label">Horario de Sesión</span>
+                        <span class="info-kv-value">{{ cita.fechaHoraInicio|date:"d/m/Y H:i" }} - {{ cita.fechaHoraFin|date:"H:i" }}</span>
+                    </div>
+                    <div class="info-kv-item">
+                        <span class="info-kv-label">Privacidad y Seguridad</span>
+                        <span class="info-kv-value">Comunicación cifrada punto a punto (WebRTC DTLS/SRTP).</span>
+                    </div>
+                </div>
+
+                {% if atenciones_previas %}
+                    <div style="margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--border-color);">
+                        <h3>💊 Tus Últimas Indicaciones</h3>
+                        <div class="timeline">
+                            {% for prev in atenciones_previas %}
+                                <div class="timeline-item">
+                                    <div class="timeline-header">
+                                        <strong>{{ prev.profesional.nombres }} {{ prev.profesional.apellidos }}</strong>
+                                        <span class="timeline-meta">{{ prev.fechaHora|date:"d/m/Y" }}</span>
+                                    </div>
+                                    <div class="clinical-block">
+                                        <div class="clinical-block-title">Diagnóstico</div>
+                                        <p>{{ prev.diagnostico }}</p>
+                                    </div>
+                                    {% if prev.indicacionesTratamiento %}
+                                        <div class="clinical-block">
+                                            <div class="clinical-block-title">Indicaciones</div>
+                                            <p>{{ prev.indicacionesTratamiento|linebreaksbr }}</p>
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                {% endif %}
+
+                <div style="margin-top: 1.25rem;">
+                    <a href="{% url 'ficha_detalle' ficha.id %}" class="btn btn-secondary btn-block">
+                        📋 Ir a Mi Ficha Clínica
+                    </a>
+                </div>
+            </div>
+        {% endif %}
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const senalUrl = "{% url 'telemedicina_senal' videoconsulta.id %}";
+    const rolSala = "{{ rol_sala }}";
+    const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]')
+        ? document.querySelector('[name=csrfmiddlewaretoken]').value
+        : "{{ csrf_token }}";
+
+    const localVideo = document.getElementById('local-video');
+    const remoteVideo = document.getElementById('remote-video');
+    const placeholder = document.getElementById('video-placeholder');
+    const placeholderTitle = document.getElementById('placeholder-title');
+    const callStatusPill = document.getElementById('call-status-pill');
+    const salaEstadoBadge = document.getElementById('sala-estado-badge');
+    const peerPresenceText = document.getElementById('peer-presence-text');
+
+    const btnMic = document.getElementById('btn-mic');
+    const btnCam = document.getElementById('btn-cam');
+    const btnScreen = document.getElementById('btn-screen');
+    const btnReconnect = document.getElementById('btn-reconnect');
+    const btnResetSignal = document.getElementById('btn-reset-signal');
+
+    let localStream = null;
+    let pc = null;
+    let micMuted = false;
+    let camOff = false;
+    let offerSent = false;
+    let answerSent = false;
+    let lastOfferSdp = null;
+    const seenIce = new Set();
+    const pendingIce = [];
+
+    const rtcConfig = {
+        iceServers: [
+            { urls: 'stun:stun.l.google.com:19302' },
+            { urls: 'stun:stun1.l.google.com:19302' }
+        ]
+    };
+
+    async function sendSignal(payload) {
+        try {
+            await fetch(senalUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrfToken,
+                    'X-Requested-With': 'XMLHttpRequest'
+                },
+                body: JSON.stringify(payload)
+            });
+        } catch (err) {
+            console.error('Error enviando señalización WebRTC:', err);
+        }
+    }
+
+    function createPeerConnection() {
+        if (pc) {
+            pc.close();
+        }
+        pc = new RTCPeerConnection(rtcConfig);
+        offerSent = false;
+        answerSent = false;
+        lastOfferSdp = null;
+        seenIce.clear();
+        pendingIce.length = 0;
+
+        if (localStream) {
+            localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+        } else {
+            pc.addTransceiver('video', { direction: 'recvonly' });
+            pc.addTransceiver('audio', { direction: 'recvonly' });
+        }
+
+        pc.ontrack = function(event) {
+            if (event.streams && event.streams[0]) {
+                remoteVideo.srcObject = event.streams[0];
+                if (placeholder) {
+                    placeholder.style.display = 'none';
+                }
+            }
+        };
+
+        pc.onicecandidate = function(event) {
+            if (event.candidate) {
+                sendSignal({ type: 'ice', candidate: event.candidate });
+            }
+        };
+
+        pc.onconnectionstatechange = function() {
+            if (!pc) return;
+            if (pc.connectionState === 'connected') {
+                callStatusPill.textContent = 'Conectado P2P en vivo';
+                if (placeholder) placeholder.style.display = 'none';
+            } else if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
+                callStatusPill.textContent = 'Conexión inestable / reconectando';
+            }
+        };
+    }
+
+    async function initMedia() {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            placeholderTitle.textContent = 'Navegador sin acceso directo a cámara/micrófono (modo escucha/notas activo)';
+            createPeerConnection();
+            return;
+        }
+        try {
+            localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+            localVideo.srcObject = localStream;
+        } catch (err) {
+            try {
+                localStream = await navigator.mediaDevices.getUserMedia({ video: false, audio: true });
+                localVideo.style.display = 'none';
+            } catch (errAudio) {
+                localVideo.style.display = 'none';
+                placeholderTitle.textContent = 'Cámara/micrófono no detectados o sin permisos (puedes operar en modo escucha y notas clínicas)';
+            }
+        }
+        createPeerConnection();
+    }
+
+    async function flushPendingIce() {
+        while (pendingIce.length > 0 && pc && pc.remoteDescription) {
+            const cand = pendingIce.shift();
+            try {
+                await pc.addIceCandidate(new RTCIceCandidate(cand));
+            } catch (e) {}
+        }
+    }
+
+    async function pollSignal() {
+        try {
+            const resp = await fetch(senalUrl, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+            if (!resp.ok) return;
+            const data = await resp.json();
+
+            if (salaEstadoBadge && data.estadoConexion) {
+                salaEstadoBadge.textContent = data.estadoConexion;
+            }
+            if (peerPresenceText) {
+                peerPresenceText.textContent = data.peer_online
+                    ? '🟢 Participante remoto en línea'
+                    : '🟡 Esperando al otro participante...';
+            }
+            if (callStatusPill && (!pc || pc.connectionState !== 'connected')) {
+                callStatusPill.textContent = `Estado: ${data.estadoConexion}`;
+            }
+
+            if (!pc) return;
+
+            if (rolSala === 'host' && data.peer_online && !offerSent && pc.signalingState === 'stable') {
+                offerSent = true;
+                const offer = await pc.createOffer();
+                await pc.setLocalDescription(offer);
+                await sendSignal({ type: 'offer', sdp: pc.localDescription });
+            }
+
+            if (rolSala === 'host' && data.answer && !pc.currentRemoteDescription) {
+                await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
+                await flushPendingIce();
+            }
+
+            if (rolSala === 'guest' && data.offer && data.offer.sdp !== lastOfferSdp) {
+                lastOfferSdp = data.offer.sdp;
+                await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
+                await flushPendingIce();
+                const answer = await pc.createAnswer();
+                await pc.setLocalDescription(answer);
+                answerSent = true;
+                await sendSignal({ type: 'answer', sdp: pc.localDescription });
+            }
+
+            if (Array.isArray(data.remote_ice)) {
+                for (const cand of data.remote_ice) {
+                    const key = JSON.stringify(cand);
+                    if (!seenIce.has(key)) {
+                        seenIce.add(key);
+                        if (pc.remoteDescription) {
+                            try {
+                                await pc.addIceCandidate(new RTCIceCandidate(cand));
+                            } catch (e) {}
+                        } else {
+                            pendingIce.push(cand);
+                        }
+                    }
+                }
+            }
+        } catch (err) {
+            console.error('Error en polling WebRTC:', err);
+        }
+    }
+
+    if (btnMic) {
+        btnMic.addEventListener('click', function() {
+            if (!localStream) return;
+            micMuted = !micMuted;
+            localStream.getAudioTracks().forEach(t => { t.enabled = !micMuted; });
+            btnMic.classList.toggle('is-muted', micMuted);
+            btnMic.textContent = micMuted ? '🔇 Activar Mic' : '🎤 Silenciar Mic';
+        });
+    }
+
+    if (btnCam) {
+        btnCam.addEventListener('click', function() {
+            if (!localStream) return;
+            camOff = !camOff;
+            localStream.getVideoTracks().forEach(t => { t.enabled = !camOff; });
+            btnCam.classList.toggle('is-muted', camOff);
+            btnCam.textContent = camOff ? '📷 Encender Cámara' : '📷 Apagar Cámara';
+        });
+    }
+
+    if (btnScreen) {
+        btnScreen.addEventListener('click', async function() {
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia || !pc) return;
+            try {
+                const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+                const screenTrack = screenStream.getVideoTracks()[0];
+                const sender = pc.getSenders().find(s => s.track && s.track.kind === 'video');
+                if (sender) {
+                    sender.replaceTrack(screenTrack);
+                    localVideo.srcObject = screenStream;
+                    btnScreen.classList.add('is-active');
+                    screenTrack.onended = function() {
+                        btnScreen.classList.remove('is-active');
+                        if (localStream) {
+                            const camTrack = localStream.getVideoTracks()[0];
+                            if (camTrack) sender.replaceTrack(camTrack);
+                            localVideo.srcObject = localStream;
+                        }
+                    };
+                }
+            } catch (e) {}
+        });
+    }
+
+    if (btnReconnect) {
+        btnReconnect.addEventListener('click', function() {
+            createPeerConnection();
+            pollSignal();
+        });
+    }
+
+    if (btnResetSignal) {
+        btnResetSignal.addEventListener('click', async function() {
+            await sendSignal({ type: 'reset' });
+            createPeerConnection();
+            pollSignal();
+        });
+    }
+
+    initMedia().then(() => {
+        pollSignal();
+        setInterval(pollSignal, 2000);
+    });
+
+    // Guardado AJAX en vivo de Notas Clínicas sin interrumpir el video WebRTC
+    const liveForm = document.getElementById('live-notes-form');
+    const btnSaveLive = document.getElementById('btn-save-live');
+    const ajaxStatus = document.getElementById('ajax-save-status');
+
+    if (liveForm && btnSaveLive) {
+        btnSaveLive.addEventListener('click', async function() {
+            const formData = new FormData(liveForm);
+            formData.set('accion_nota', 'guardar');
+            btnSaveLive.disabled = true;
+            ajaxStatus.innerHTML = '<span style="color: var(--primary-color);">Guardando y cifrando nota clínica...</span>';
+
+            try {
+                const resp = await fetch(liveForm.action, {
+                    method: 'POST',
+                    headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                    body: formData
+                });
+                const data = await resp.json();
+                if (resp.ok && data.ok) {
+                    const hora = new Date().toLocaleTimeString('es-CL');
+                    ajaxStatus.innerHTML = `<span style="color: #4ade80;">✅ ${data.mensaje} (${hora})</span>`;
+                } else {
+                    const msg = data.error || 'Complete los campos obligatorios (Motivo de consulta y Diagnóstico).';
+                    ajaxStatus.innerHTML = `<span style="color: #f87171;">⚠️ ${msg}</span>`;
+                }
+            } catch (err) {
+                ajaxStatus.innerHTML = '<span style="color: #f87171;">⚠️ Error de red al guardar la nota.</span>';
+            } finally {
+                btnSaveLive.disabled = false;
+            }
+        });
+    }
+});
+</script>
+{% endblock %}
+

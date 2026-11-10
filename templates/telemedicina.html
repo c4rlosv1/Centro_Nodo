@@ -1,26 +1,68 @@
 {% extends 'base.html' %}
 
 {% block content %}
-<div class="hero">
-    <h2>Telemedicina</h2>
-    <p>Plataforma de atención remota con videollamadas integradas</p>
+<div class="page-header">
+    <div>
+        <h2>📹 Telemedicina — Entorno Dual</h2>
+        <p>Salas de videoconsulta WebRTC P2P con sala de espera y ficha clínica continua cifrada en vivo</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'agendamiento' %}" class="btn btn-primary">+ Agendar Videoconsulta</a>
+    </div>
 </div>
 
-<div class="modules-grid">
-    <div class="module-card">
-        <h3>Videoconsultas</h3>
-        <p>Iniciar sesión de videollamada con pacientes mediante WebRTC.</p>
-        <button class="btn btn-primary" onclick="alert('Función en desarrollo - WebRTC')">Iniciar Llamada</button>
-    </div>
-    <div class="module-card">
-        <h3>Notas Clínicas</h3>
-        <p>Registrar evoluciones clínicas durante la videoconsulta.</p>
-        <button class="btn btn-secondary" onclick="alert('Función en desarrollo')">Registrar Notas</button>
-    </div>
-    <div class="module-card">
-        <h3>Historial</h3>
-        <p>Revisar historial de videoconsultas y grabaciones.</p>
-        <button class="btn btn-secondary" onclick="alert('Función en desarrollo')">Ver Historial</button>
-    </div>
+<div class="panel-card">
+    <h3>Salas de Videoconsulta Programadas</h3>
+
+    {% if videoconsultas %}
+        <div class="table-wrapper">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Fecha y Hora</th>
+                        <th>Paciente</th>
+                        <th>Profesional</th>
+                        <th>Sala WebRTC</th>
+                        <th>Estado Conexión</th>
+                        <th>Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for vc in videoconsultas %}
+                    <tr>
+                        <td>
+                            <strong>{{ vc.cita.fechaHoraInicio|date:"d/m/Y" }}</strong><br>
+                            <small class="timeline-meta">{{ vc.cita.fechaHoraInicio|date:"H:i" }} - {{ vc.cita.fechaHoraFin|date:"H:i" }}</small>
+                        </td>
+                        <td>{{ vc.cita.paciente.nombres }} {{ vc.cita.paciente.apellidos }}</td>
+                        <td>{{ vc.cita.profesional.nombres }} {{ vc.cita.profesional.apellidos }}</td>
+                        <td><code>{{ vc.urlSalaWebRTC }}</code></td>
+                        <td>
+                            <span class="status-badge status-{{ vc.estadoConexion|lower|slugify }}">{{ vc.estadoConexion }}</span>
+                        </td>
+                        <td>
+                            <div class="actions-inline">
+                                <a href="{% url 'telemedicina_sala' vc.id %}" class="btn btn-sm btn-primary">
+                                    📹 Entrar a Sala Dual
+                                </a>
+                                {% if user.es_administrador or user.es_profesional %}
+                                    {% if vc.cita.paciente.ficha_clinica %}
+                                        <a href="{% url 'ficha_detalle' vc.cita.paciente.ficha_clinica.id %}?cita_id={{ vc.cita.id }}" class="btn btn-sm btn-secondary">
+                                            Ver Ficha
+                                        </a>
+                                    {% endif %}
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    {% else %}
+        <div class="empty-state">
+            <p>No hay videoconsultas programadas actualmente. Puedes crear una desde <a href="{% url 'agendamiento' %}" style="color: var(--primary-color);">Agendamiento</a> marcando la opción <em>Modalidad Telemedicina</em>.</p>
+        </div>
+    {% endif %}
 </div>
 {% endblock %}

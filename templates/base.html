@@ -24,8 +24,27 @@
             <nav>
                 <ul class="nav-list">
                     <li><a href="{% url 'dashboard' %}">Dashboard</a></li>
-                    <li><a href="{% url 'agendamiento' %}">Agendamiento</a></li>
-                    <li><a href="{% url 'telemedicina' %}">Telemedicina</a></li>
+                    {% if user.is_authenticated %}
+                        <li><a href="{% url 'agendamiento' %}">Agendamiento</a></li>
+                        {% if user.es_staff_clinico %}
+                            <li><a href="{% url 'pacientes_lista' %}">Pacientes</a></li>
+                        {% endif %}
+                        {% if user.es_administrador or user.es_profesional %}
+                            <li><a href="{% url 'fichas_lista' %}">Fichas Clínicas</a></li>
+                        {% elif user.es_paciente %}
+                            <li><a href="{% url 'fichas_lista' %}">Mi Ficha</a></li>
+                        {% endif %}
+                        {% if user.es_administrador or user.es_profesional or user.es_paciente %}
+                            <li><a href="{% url 'telemedicina' %}">Telemedicina</a></li>
+                        {% endif %}
+                        {% if user.es_administrador or user.es_recepcionista %}
+                            <li><a href="{% url 'caja' %}">Caja y Pagos</a></li>
+                        {% elif user.es_profesional %}
+                            <li><a href="{% url 'caja' %}">Honorarios</a></li>
+                        {% elif user.es_paciente %}
+                            <li><a href="{% url 'caja' %}">Mis Pagos</a></li>
+                        {% endif %}
+                    {% endif %}
                     
                     {% if user.is_authenticated %}
                         <li class="user-badge-item">

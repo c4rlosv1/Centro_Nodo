@@ -585,3 +585,667 @@ footer {
     font-size: 0.9rem;
     font-weight: 500;
 }
+
+/* ==========================================================================
+   Módulos Funcionales: Cabeceras, Tablas, Fichas, Agenda y Timelines
+   ========================================================================== */
+
+.nav-list {
+    flex-wrap: wrap;
+    gap: 1.1rem;
+}
+
+.page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 1rem;
+    margin-bottom: 2rem;
+    padding-bottom: 1.25rem;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.page-header h2 {
+    font-size: 1.85rem;
+    font-weight: 700;
+    color: var(--text-color);
+    letter-spacing: -0.025em;
+}
+
+.page-header p {
+    color: var(--text-secondary);
+    font-size: 0.95rem;
+    margin-top: 0.25rem;
+}
+
+.page-actions {
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.panel-card {
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 14px;
+    padding: 1.75rem;
+    box-shadow: var(--shadow-sm);
+    margin-bottom: 1.5rem;
+}
+
+.panel-card h3 {
+    font-size: 1.2rem;
+    font-weight: 600;
+    color: var(--text-color);
+    margin-bottom: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+/* Métricas Dashboard */
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+    gap: 1.25rem;
+    margin: 2rem 0;
+}
+
+.stat-card {
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    box-shadow: var(--shadow-sm);
+}
+
+.stat-label {
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.stat-value {
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--primary-color);
+}
+
+/* Barras de Búsqueda y Filtros */
+.search-bar,
+.filter-bar {
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    margin-bottom: 1.5rem;
+}
+
+.search-bar .form-control {
+    flex: 1;
+    min-width: 240px;
+}
+
+.filter-field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    min-width: 170px;
+}
+
+.filter-field label {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+
+/* Tablas Responsivas */
+.table-wrapper {
+    width: 100%;
+    overflow-x: auto;
+    border-radius: 12px;
+    border: 1px solid var(--border-color);
+    background: var(--card-bg);
+}
+
+.data-table {
+    width: 100%;
+    border-collapse: collapse;
+    text-align: left;
+    font-size: 0.925rem;
+}
+
+.data-table th {
+    background: var(--bg-color);
+    color: var(--text-secondary);
+    font-weight: 600;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 0.9rem 1rem;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.data-table td {
+    padding: 0.95rem 1rem;
+    border-bottom: 1px solid var(--border-color);
+    color: var(--text-color);
+    vertical-align: middle;
+}
+
+.data-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.data-table tbody tr:hover {
+    background: rgba(14, 165, 233, 0.04);
+}
+
+.empty-state {
+    text-align: center;
+    padding: 3rem 1.5rem;
+    color: var(--text-secondary);
+}
+
+/* Botones pequeños y variantes */
+.btn-sm {
+    padding: 0.45rem 0.85rem;
+    font-size: 0.825rem;
+    border-radius: 7px;
+}
+
+.btn-success {
+    background: #16a34a;
+    color: #ffffff;
+}
+
+.btn-success:hover {
+    background: #15803d;
+    transform: translateY(-1px);
+}
+
+.btn-warning {
+    background: #d97706;
+    color: #ffffff;
+}
+
+.btn-warning:hover {
+    background: #b45309;
+    transform: translateY(-1px);
+}
+
+.btn-danger {
+    background: rgba(239, 68, 68, 0.12);
+    color: #ef4444;
+    border: 1px solid rgba(239, 68, 68, 0.35);
+}
+
+.btn-danger:hover {
+    background: #ef4444;
+    color: #ffffff;
+}
+
+.actions-inline {
+    display: flex;
+    gap: 0.45rem;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+/* Badges de Estado */
+.status-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.25rem 0.65rem;
+    border-radius: 9999px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    border: 1px solid transparent;
+    white-space: nowrap;
+}
+
+.status-agendada,
+.status-pendiente {
+    background: rgba(14, 165, 233, 0.14);
+    color: #38bdf8;
+    border-color: rgba(14, 165, 233, 0.35);
+}
+
+.status-confirmada,
+.status-activo {
+    background: rgba(139, 92, 246, 0.14);
+    color: #a78bfa;
+    border-color: rgba(139, 92, 246, 0.35);
+}
+
+.status-en-atencion,
+.status-en-curso {
+    background: rgba(245, 158, 11, 0.14);
+    color: #fbbf24;
+    border-color: rgba(245, 158, 11, 0.35);
+}
+
+.status-realizada,
+.status-finalizada,
+.status-pagado {
+    background: rgba(34, 197, 94, 0.14);
+    color: #4ade80;
+    border-color: rgba(34, 197, 94, 0.35);
+}
+
+.status-cancelada,
+.status-inactivo {
+    background: rgba(239, 68, 68, 0.14);
+    color: #f87171;
+    border-color: rgba(239, 68, 68, 0.35);
+}
+
+/* Layouts divididos y formularios clínicos */
+.split-layout {
+    display: grid;
+    grid-template-columns: 380px 1fr;
+    gap: 1.5rem;
+    align-items: start;
+}
+
+@media (max-width: 960px) {
+    .split-layout {
+        grid-template-columns: 1fr;
+    }
+}
+
+.form-grid-2 {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 1rem;
+}
+
+.info-kv-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.info-kv-item {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    padding-bottom: 0.65rem;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.info-kv-item:last-child {
+    border-bottom: none;
+    padding-bottom: 0;
+}
+
+.info-kv-label {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.info-kv-value {
+    font-size: 0.98rem;
+    color: var(--text-color);
+}
+
+/* Línea de Tiempo de Atenciones Clínicas */
+.timeline {
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+}
+
+.timeline-item {
+    background: var(--bg-color);
+    border: 1px solid var(--border-color);
+    border-left: 4px solid var(--primary-color);
+    border-radius: 10px;
+    padding: 1.25rem;
+}
+
+.timeline-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-bottom: 0.85rem;
+    padding-bottom: 0.65rem;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.timeline-meta {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
+.clinical-block {
+    margin-top: 0.75rem;
+}
+
+.clinical-block-title {
+    font-size: 0.8rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    color: var(--primary-color);
+    letter-spacing: 0.03em;
+    margin-bottom: 0.25rem;
+}
+
+.clinical-block-confidential {
+    background: rgba(139, 92, 246, 0.08);
+    border: 1px dashed rgba(139, 92, 246, 0.35);
+    padding: 0.75rem;
+    border-radius: 8px;
+    margin-top: 0.75rem;
+}
+
+/* Disponibilidad horaria en tiempo real */
+.availability-box {
+    margin-top: 1rem;
+    padding: 0.9rem;
+    border-radius: 10px;
+    background: var(--bg-color);
+    border: 1px solid var(--border-color);
+    font-size: 0.85rem;
+}
+
+.availability-slots {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+    margin-top: 0.5rem;
+}
+
+.slot-pill {
+    padding: 0.25rem 0.6rem;
+    border-radius: 6px;
+    font-size: 0.78rem;
+    font-weight: 600;
+}
+
+.slot-busy {
+    background: rgba(239, 68, 68, 0.14);
+    color: #f87171;
+    border: 1px solid rgba(239, 68, 68, 0.35);
+}
+
+.slot-blocked {
+    background: rgba(245, 158, 11, 0.14);
+    color: #fbbf24;
+    border: 1px solid rgba(245, 158, 11, 0.35);
+}
+
+.slot-free {
+    background: rgba(34, 197, 94, 0.14);
+    color: #4ade80;
+    border: 1px solid rgba(34, 197, 94, 0.35);
+}
+
+/* ==========================================================================
+   Módulo Telemedicina Dual Panel (WebRTC + Notas Clínicas) & Caja/Comprobantes
+   ========================================================================== */
+
+.status-en-espera {
+    background: rgba(14, 165, 233, 0.16);
+    color: #38bdf8;
+    border-color: rgba(14, 165, 233, 0.45);
+}
+
+.status-anulado {
+    background: rgba(239, 68, 68, 0.14);
+    color: #f87171;
+    border-color: rgba(239, 68, 68, 0.35);
+}
+
+.badge-encrypted {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.25rem 0.65rem;
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    background: rgba(139, 92, 246, 0.14);
+    color: #a78bfa;
+    border: 1px solid rgba(139, 92, 246, 0.35);
+}
+
+.telemed-grid {
+    display: grid;
+    grid-template-columns: 1.35fr 1fr;
+    gap: 1.5rem;
+    align-items: start;
+}
+
+@media (max-width: 1024px) {
+    .telemed-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+.video-stage {
+    position: relative;
+    background: #0b1120;
+    border: 1px solid var(--border-color);
+    border-radius: 14px;
+    overflow: hidden;
+    aspect-ratio: 16 / 9;
+    min-height: 360px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.video-remote {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.video-local-pip {
+    position: absolute;
+    right: 1rem;
+    bottom: 1rem;
+    width: 170px;
+    height: 112px;
+    border-radius: 10px;
+    border: 2px solid var(--primary-color);
+    background: #1e293b;
+    object-fit: cover;
+    box-shadow: var(--shadow-lg);
+    z-index: 3;
+}
+
+.video-placeholder {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 2rem;
+    color: #cbd5e1;
+    background: radial-gradient(circle at center, rgba(30, 58, 138, 0.45), rgba(11, 17, 32, 0.94));
+    z-index: 2;
+}
+
+.call-status-pill {
+    position: absolute;
+    top: 0.9rem;
+    left: 0.9rem;
+    z-index: 4;
+    background: rgba(15, 23, 42, 0.85);
+    color: #e2e8f0;
+    padding: 0.35rem 0.8rem;
+    border-radius: 9999px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    border: 1px solid rgba(56, 189, 248, 0.4);
+    backdrop-filter: blur(6px);
+}
+
+.video-controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+    justify-content: center;
+    margin-top: 1rem;
+}
+
+.btn-control {
+    padding: 0.55rem 1rem;
+    border-radius: 8px;
+    font-size: 0.875rem;
+    font-weight: 600;
+    border: 1px solid var(--border-color);
+    background: var(--bg-color);
+    color: var(--text-color);
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.btn-control:hover {
+    border-color: var(--primary-color);
+}
+
+.btn-control.is-muted {
+    background: rgba(239, 68, 68, 0.16);
+    border-color: #ef4444;
+    color: #f87171;
+}
+
+.btn-control.is-active {
+    background: rgba(34, 197, 94, 0.16);
+    border-color: #22c55e;
+    color: #4ade80;
+}
+
+.ajax-save-status {
+    font-size: 0.85rem;
+    font-weight: 600;
+    margin-top: 0.5rem;
+    min-height: 1.3rem;
+}
+
+.patient-strip {
+    background: var(--bg-color);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    padding: 0.9rem 1rem;
+    margin-bottom: 1rem;
+    font-size: 0.88rem;
+}
+
+.details-collapse {
+    margin-bottom: 1rem;
+    background: var(--bg-color);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    padding: 0.75rem 1rem;
+}
+
+.details-collapse summary {
+    cursor: pointer;
+    font-weight: 600;
+    color: var(--primary-color);
+    font-size: 0.9rem;
+}
+
+/* Comprobante Imprimible */
+.receipt-card {
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 14px;
+    padding: 2.25rem;
+    max-width: 760px;
+    margin: 0 auto;
+    box-shadow: var(--shadow-md);
+}
+
+.receipt-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 1rem;
+    padding-bottom: 1.25rem;
+    border-bottom: 2px solid var(--border-color);
+    margin-bottom: 1.5rem;
+}
+
+.receipt-amount-box {
+    background: var(--bg-color);
+    border: 1px solid var(--border-color);
+    border-left: 4px solid var(--primary-color);
+    border-radius: 10px;
+    padding: 1.25rem;
+    margin: 1.5rem 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 1rem;
+}
+
+.receipt-total {
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--primary-color);
+}
+
+@media print {
+    header,
+    footer,
+    .no-print,
+    .messages-container,
+    .page-actions {
+        display: none !important;
+    }
+
+    body {
+        background: #ffffff !important;
+        color: #0f172a !important;
+    }
+
+    main {
+        padding: 0 !important;
+        min-height: auto !important;
+    }
+
+    .receipt-card {
+        background: #ffffff !important;
+        color: #0f172a !important;
+        border: 1px solid #cbd5e1 !important;
+        box-shadow: none !important;
+        max-width: 100% !important;
+        padding: 1.5rem !important;
+    }
+
+    .receipt-amount-box,
+    .info-kv-item {
+        background: #f8fafc !important;
+        color: #0f172a !important;
+        border-color: #cbd5e1 !important;
+    }
+
+    .info-kv-value,
+    .receipt-card h2,
+    .receipt-card h3 {
+        color: #0f172a !important;
+    }
+}
+
+
