@@ -129,14 +129,32 @@
   - Comprobante de pago imprimible y exportable a PDF desde el navegador (`templates/caja/comprobante.html` con reglas `@media print` en `static/css/style.css`).
   - Filtro de formato monetario chileno `|clp` en `clinica/templatetags/clinica_extras.py`.
 
+### 14. Sala de Espera Virtual, Documentos Clínicos PDF y Notificaciones de Citas (Partes 5, 6 y 7)
+- **Compuerta Real de Sala de Espera Virtual WebRTC (`clinica/views.py`, `templates/telemedicina_sala.html`):**
+  - `telemedicina_senal_view` bloquea la negociación SDP (`offer`/`answer`/`ice`) devolviendo HTTP `409 Conflict` y ocultando ofertas/candidatos mientras `estadoConexion != 'En curso'`, permitiendo solo verificación de presencia (`peer_online`).
+  - En `templates/telemedicina_sala.html`, los flujos locales de audio/video del paciente quedan retenidos en espera hasta que el especialista presiona **"✅ Admitir Paciente e Iniciar"** (`En curso`), momento en que se conecta automáticamente vía P2P sin recargar la página.
+  - Al finalizar la consulta (`Finalizada` vía botón de estado o formulario AJAX de notas), se limpia la caché de señalización (`webrtc_room_<id>`), se liberan las pistas de cámara/micrófono (`track.stop()`) y se cierra la conexión `RTCPeerConnection`.
+- **Emisión de Documentos Clínicos Imprimibles y Reporte de Caja (`clinica/views.py`, `templates/fichas/documento_atencion.html`, `templates/caja/reporte_liquidacion.html`, `static/css/style.css`):**
+  - Nueva vista `atencion_documento_view` (`/fichas/atencion/<id>/documento/`) con RBAC estricto (solo `Administrador`, `Profesional` o `Paciente` titular) y selector de documento:
+    - `?tipo=indicaciones`: **Resumen de Atención e Indicaciones Terapéuticas** (diagnóstico + indicaciones, excluyendo estrictamente `evolucionNotas`).
+    - `?tipo=certificado`: **Certificado de Asistencia Clínica** (constancia horaria y registro del especialista, omitiendo motivo, diagnóstico e indicaciones para proteger reserva diagnóstica).
+  - Accesos directos integrados en `templates/fichas/detalle.html` y en el dashboard del paciente (`templates/dashboard.html`).
+  - Nueva vista `caja_reporte_liquidacion_view` (`/caja/reporte-liquidacion/`) accesible desde `templates/caja/index.html` con cuadratura por medio de pago, cálculo de comisión/líquido por especialista, listado de pagos confirmados y formato listo para impresión/PDF vía `@media print`.
+- **Notificaciones por Correo y Recordatorios Programables (`clinica/models.py`, `clinica/notifications.py`, `templates/emails/`, `clinica/management/commands/enviar_recordatorios_citas.py`):**
+  - Nuevo modelo `NotificacionCita` (migración `0005_notificacioncita`, registrado en `clinica/admin.py`) para auditar tipo, destinatario, asunto, fecha de envío y estado.
+  - Configuración SMTP por variables de entorno en `core/settings.py` y `.env.example` (`EMAIL_BACKEND` por defecto en consola para desarrollo).
+  - Envío automático de correos HTML + texto plano al **agendar** (paciente y especialista), **confirmar** (paciente) y **cancelar** (paciente y especialista).
+  - Botón manual **✉️ Recordar** e indicador de correos emitidos en `templates/agendamiento.html` (`cita_enviar_recordatorio_view`).
+  - Comando `python manage.py enviar_recordatorios_citas [--horas 24] [--dry-run]` para enviar recordatorios de citas activas próximas evitando duplicados cuando ya existe un `Recordatorio` exitoso.
+
 
 ---
 
 ## 🔍 Verificación Realizada
-- **Migraciones:** Todas las migraciones (`0001` a `0004` de `clinica` + `admin`, `auth`, `contenttypes`, `sessions`) aplicadas exitosamente.
+- **Migraciones:** Todas las migraciones (`0001` a `0005` de `clinica` + `admin`, `auth`, `contenttypes`, `sessions`) aplicadas exitosamente y validadas con `makemigrations --check --dry-run` (**Sin cambios pendientes**).
+- **Chequeo del sistema:** `python manage.py check` (**0 issues**).
 - **Pruebas Automatizadas:**
-  - Bloqueo de usuarios anónimos en rutas privadas (redirección a login): **OK**.
-  - Login con username y con email, cierre de sesión y reseteo de contraseña: **OK**.
-  - Suite completa `python manage.py test clinica -v 2` (**12 pruebas** cubriendo RUT, Pacientes, Fichas/RBAC, Agendamiento anti-colisiones, Bloqueos, Atenciones, Cifrado en reposo en BD cruda, Dashboards por rol, Telemedicina Dual/AJAX/WebRTC y Caja/Liquidaciones/Comprobante/CSV): **OK**.
+  - Bloqueo de usuarios anónimos en rutas privadas (redirección a login), inicio de sesión con `username` o `email`, bloqueo de cuentas inactivas y cierre de sesión: **OK**.
+  - Suite completa `python manage.py test clinica -v 2` (**21 pruebas** cubriendo las **7 Fases** y casos límite de seguridad: RUT Módulo 11, Pacientes sin duplicados, Fichas/Atenciones, RBAC estricto y aislamiento cruzado entre pacientes, Agendamiento anti-colisiones por profesional/paciente/bloqueos/bordes/cancelación, Cifrado Fernet en BD cruda, Dashboards por rol, Telemedicina Dual/AJAX/Sala de Espera WebRTC HTTP 409, Caja/Liquidaciones/Anulación/Comprobante/Reporte PDF/CSV, Documentos Clínicos PDF y Notificaciones/Recordatorios automáticos, manuales y `--dry-run`): **OK**.
 
 

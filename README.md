@@ -15,10 +15,12 @@ Solución web integral orientada a la digitalización clínica, gestión de fich
 
 ## 🌟 Módulos Principales
 1. **Control de Acceso y Roles (RBAC):** Perfiles y dashboards diferenciados para Médicos/Profesionales, Pacientes, Recepcionistas y Administradores.
-2. **Agendamiento en tiempo real:** Gestión de disponibilidad de especialistas, bloqueos horarios y mitigación de colisiones.
+2. **Agendamiento en tiempo real:** Gestión de disponibilidad de especialistas, bloqueos horarios, detección de colisiones y recordatorios por correo.
 3. **Ficha Clínica Electrónica Cifrada:** Almacenamiento cifrado en reposo (`EncryptedTextField`) de historiales médicos, alergias y evoluciones clínicas (`AtencionClinica`).
-4. **Entorno Dual de Telemedicina:** Videoconsulta WebRTC P2P con sala de espera y toma de notas clínicas continuas vía AJAX sin interrumpir el video.
-5. **Caja, Pagos y Liquidaciones:** Registro de pagos por consulta, cuadratura por medio de pago, cálculo de comisiones/honorarios, comprobantes imprimibles y exportación a CSV.
+4. **Entorno Dual de Telemedicina:** Videoconsulta WebRTC P2P con Sala de Espera Virtual (compuerta previa a la admisión) y notas clínicas continuas vía AJAX sin interrumpir el video.
+5. **Caja, Pagos y Liquidaciones:** Registro de pagos por consulta, cuadratura por medio de pago, cálculo de comisiones/honorarios, comprobantes, reporte consolidado PDF/imprimible y exportación a CSV.
+6. **Documentos Clínicos Imprimibles (PDF):** Emisión de Certificados de Asistencia (sin exponer diagnóstico) y Resumen de Atención e Indicaciones Terapéuticas desde la ficha clínica o el panel del paciente.
+7. **Notificaciones y Recordatorios de Citas:** Correos multiparte automáticos al agendar, confirmar o cancelar, recordatorio manual desde agenda y comando programable `manage.py enviar_recordatorios_citas`.
 
 ---
 
@@ -44,7 +46,7 @@ source .venv/bin/activate
 ### 3. Configurar variables de entorno (opcional en desarrollo)
 ```bash
 copy .env.example .env
-# Ajustar CLINICAL_ENCRYPTION_KEY y datos MySQL si usas Laragon/MySQL
+# Ajustar CLINICAL_ENCRYPTION_KEY, datos MySQL (Laragon) y variables SMTP si deseas correos reales
 ```
 
 ### 4. Instalar dependencias
@@ -67,6 +69,15 @@ python manage.py crear_roles_y_usuarios
 python manage.py runserver
 ```
 Abre en tu navegador: [http://127.0.0.1:8000/](http://127.0.0.1:8000/)
+
+### 8. Recordatorios programados de citas (opcional / Cron)
+```bash
+# Vista previa sin enviar correos
+python manage.py enviar_recordatorios_citas --horas 24 --dry-run
+
+# Envío efectivo (con registro en NotificacionCita para no duplicar)
+python manage.py enviar_recordatorios_citas --horas 24
+```
 
 ---
 

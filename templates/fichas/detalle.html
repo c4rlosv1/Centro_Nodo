@@ -169,6 +169,15 @@
                                     <p>{{ atencion.evolucionNotas|linebreaksbr }}</p>
                                 </div>
                             {% endif %}
+
+                            <div class="actions-inline no-print" style="margin-top: 0.9rem; padding-top: 0.65rem; border-top: 1px dashed var(--border-color);">
+                                <a href="{% url 'atencion_documento' atencion.id %}?tipo=indicaciones" class="btn btn-sm btn-secondary">
+                                    📄 Indicaciones PDF
+                                </a>
+                                <a href="{% url 'atencion_documento' atencion.id %}?tipo=certificado" class="btn btn-sm btn-secondary">
+                                    📜 Certificado Asistencia
+                                </a>
+                            </div>
                         </div>
                     {% endfor %}
                 </div>

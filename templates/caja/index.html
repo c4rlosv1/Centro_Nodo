@@ -21,6 +21,9 @@
     </div>
     {% if not user.es_paciente %}
         <div class="page-actions">
+            <a href="{% url 'caja_reporte_liquidacion' %}?fecha={{ fecha_filtro|urlencode }}&estado={{ estado_filtro|urlencode }}&metodo={{ metodo_filtro|urlencode }}&comision={{ comision_pct }}" class="btn btn-primary">
+                🖨️ Reporte Liquidación PDF
+            </a>
             <a href="{% url 'caja_exportar_csv' %}?fecha={{ fecha_filtro|urlencode }}&estado={{ estado_filtro|urlencode }}&metodo={{ metodo_filtro|urlencode }}" class="btn btn-secondary">
                 📥 Exportar CSV (Excel)
             </a>

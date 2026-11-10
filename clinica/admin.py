@@ -11,6 +11,7 @@ from .models import (
     Pago,
     FichaClinica,
     AtencionClinica,
+    NotificacionCita,
 )
 
 
@@ -84,4 +85,11 @@ class AtencionClinicaAdmin(admin.ModelAdmin):
     list_display = ('id', 'fichaClinica', 'profesional', 'fechaHora')
     list_filter = ('profesional',)
     search_fields = ('fichaClinica__paciente__rut', 'fichaClinica__paciente__nombres', 'fichaClinica__paciente__apellidos')
+
+
+@admin.register(NotificacionCita)
+class NotificacionCitaAdmin(admin.ModelAdmin):
+    list_display = ('id', 'cita', 'tipo', 'destinatario', 'exitoso', 'enviadoEn')
+    list_filter = ('tipo', 'exitoso')
+    search_fields = ('destinatario', 'asunto', 'cita__paciente__rut')
 

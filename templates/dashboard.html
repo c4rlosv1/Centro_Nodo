@@ -237,6 +237,14 @@
                                     <p>{{ atencion.indicacionesTratamiento|linebreaksbr }}</p>
                                 </div>
                             {% endif %}
+                            <div class="actions-inline no-print" style="margin-top: 0.85rem;">
+                                <a href="{% url 'atencion_documento' atencion.id %}?tipo=indicaciones" class="btn btn-sm btn-secondary">
+                                    📄 Indicaciones PDF
+                                </a>
+                                <a href="{% url 'atencion_documento' atencion.id %}?tipo=certificado" class="btn btn-sm btn-secondary">
+                                    📜 Certificado Asistencia
+                                </a>
+                            </div>
                         </div>
                     {% endfor %}
                 </div>

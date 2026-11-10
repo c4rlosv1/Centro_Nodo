@@ -25,6 +25,7 @@ from .models import (
     Pago,
     FichaClinica,
     AtencionClinica,
+    NotificacionCita,
 )
 from .forms import (
     LoginForm,
@@ -36,6 +37,7 @@ from .forms import (
     PagoForm,
 )
 from .decorators import rol_requerido
+from .notifications import enviar_notificacion_cita
 from .utils import limpiar_rut
 
 
@@ -517,6 +519,46 @@ def atencion_crear_view(request, ficha_id):
     return redirect('ficha_detalle', ficha_id=ficha.id)
 
 
+@login_required
+def atencion_documento_view(request, atencion_id):
+    """
+    Emite el documento clínico entregable (imprimible / PDF vía navegador):
+    - tipo='indicaciones': Resumen de Atención e Indicaciones Terapéuticas.
+    - tipo='certificado': Certificado de Asistencia Clínica (sin diagnóstico sensible).
+    Nunca expone evolucionNotas confidenciales.
+    """
+    atencion = get_object_or_404(
+        AtencionClinica.objects.select_related(
+            'fichaClinica',
+            'fichaClinica__paciente',
+            'fichaClinica__paciente__usuario',
+            'profesional',
+            'cita',
+        ),
+        pk=atencion_id
+    )
+    paciente = atencion.fichaClinica.paciente
+    es_clinico = request.user.es_administrador or request.user.es_profesional
+    es_dueno = request.user.es_paciente and paciente.usuario_id == request.user.id
+
+    if not (es_clinico or es_dueno):
+        messages.warning(request, "No tienes autorización para emitir este documento clínico.")
+        return redirect('dashboard')
+
+    tipo_doc = request.GET.get('tipo', 'indicaciones').strip().lower()
+    if tipo_doc not in ['indicaciones', 'certificado']:
+        tipo_doc = 'indicaciones'
+
+    return render(request, 'fichas/documento_atencion.html', {
+        'atencion': atencion,
+        'ficha': atencion.fichaClinica,
+        'paciente': paciente,
+        'profesional': atencion.profesional,
+        'tipo_doc': tipo_doc,
+        'es_clinico': es_clinico,
+    })
+
+
 # ==============================================================================
 # Módulo 3: Agendamiento Real (Cita y BloqueoHorario)
 # ==============================================================================
@@ -554,10 +596,12 @@ def agendamiento_view(request):
                         estadoConexion='Pendiente',
                     )
 
+            notif = enviar_notificacion_cita(cita, tipo='Agendamiento', notificar_profesional=True)
             fecha_str = timezone.localtime(cita.fechaHoraInicio).strftime('%d/%m/%Y a las %H:%M')
+            aviso_correo = " Se envió confirmación por correo al paciente." if notif['enviado_paciente'] else ""
             messages.success(
                 request,
-                f"Cita #{cita.id} agendada exitosamente para el {fecha_str} con {cita.profesional.nombres} {cita.profesional.apellidos}."
+                f"Cita #{cita.id} agendada exitosamente para el {fecha_str} con {cita.profesional.nombres} {cita.profesional.apellidos}.{aviso_correo}"
             )
             return redirect('agendamiento')
         else:
@@ -577,8 +621,8 @@ def agendamiento_view(request):
     ver_todas = request.GET.get('ver') == 'todas'
 
     citas_qs = Cita.objects.select_related(
-        'paciente', 'profesional', 'videoconsulta', 'atencion_clinica'
-    ).order_by('fechaHoraInicio')
+        'paciente', 'paciente__usuario', 'profesional', 'videoconsulta', 'atencion_clinica'
+    ).prefetch_related('notificaciones').order_by('fechaHoraInicio')
 
     if user.es_paciente and hasattr(user, 'paciente'):
         citas_qs = citas_qs.filter(paciente=user.paciente)
@@ -667,7 +711,48 @@ def cita_cambiar_estado_view(request, cita_id):
 
         cita.estado = nuevo_estado
         cita.save(update_fields=['estado'])
+
+        if nuevo_estado == 'Confirmada':
+            enviar_notificacion_cita(cita, tipo='Confirmación', notificar_profesional=False)
+        elif nuevo_estado == 'Cancelada':
+            enviar_notificacion_cita(cita, tipo='Cancelación', notificar_profesional=True)
+
         messages.success(request, f"Cita #{cita.id} actualizada a estado '{nuevo_estado}'.")
+
+    return redirect('agendamiento')
+
+
+@login_required
+@rol_requerido(['Administrador', 'Profesional', 'Recepcionista'])
+def cita_enviar_recordatorio_view(request, cita_id):
+    """
+    Envía manualmente un recordatorio por correo electrónico al paciente de una cita activa.
+    """
+    cita = get_object_or_404(
+        Cita.objects.select_related('paciente', 'paciente__usuario', 'profesional', 'videoconsulta'),
+        pk=cita_id
+    )
+
+    if request.method == 'POST':
+        if request.user.es_profesional and hasattr(request.user, 'profesional'):
+            if cita.profesional_id != request.user.profesional.id:
+                messages.warning(request, "Solo puedes enviar recordatorios de tus propias citas.")
+                return redirect('agendamiento')
+
+        if cita.estado == 'Cancelada':
+            messages.error(request, "No se puede enviar recordatorio para una cita cancelada.")
+            return redirect('agendamiento')
+
+        res = enviar_notificacion_cita(cita, tipo='Recordatorio', notificar_profesional=False)
+        if res['enviado_paciente']:
+            messages.success(request, f"Recordatorio enviado a {res['email_paciente']} para la Cita #{cita.id}.")
+        elif not res['email_paciente']:
+            messages.warning(
+                request,
+                f"El paciente {cita.paciente.nombres} {cita.paciente.apellidos} no tiene cuenta con correo electrónico registrada."
+            )
+        else:
+            messages.error(request, "No fue posible enviar el recordatorio por correo electrónico.")
 
     return redirect('agendamiento')
 
@@ -876,6 +961,7 @@ def telemedicina_sala_view(request, videoconsulta_id):
                     cita.save(update_fields=['estado'])
                     videoconsulta.estadoConexion = 'Finalizada'
                     videoconsulta.save(update_fields=['estadoConexion'])
+                    cache.delete(f"webrtc_room_{videoconsulta.id}")
                 elif cita.estado in ['Agendada', 'Confirmada']:
                     cita.estado = 'En atención'
                     cita.save(update_fields=['estado'])
@@ -954,9 +1040,11 @@ def telemedicina_estado_view(request, videoconsulta_id):
         if nuevo_estado == 'En curso' and videoconsulta.cita.estado in ['Agendada', 'Confirmada']:
             videoconsulta.cita.estado = 'En atención'
             videoconsulta.cita.save(update_fields=['estado'])
-        elif nuevo_estado == 'Finalizada' and videoconsulta.cita.estado == 'En atención':
-            videoconsulta.cita.estado = 'Realizada'
-            videoconsulta.cita.save(update_fields=['estado'])
+        elif nuevo_estado == 'Finalizada':
+            cache.delete(f"webrtc_room_{videoconsulta.id}")
+            if videoconsulta.cita.estado == 'En atención':
+                videoconsulta.cita.estado = 'Realizada'
+                videoconsulta.cita.save(update_fields=['estado'])
 
         if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
             return JsonResponse({'ok': True, 'estadoConexion': videoconsulta.estadoConexion})
@@ -994,6 +1082,12 @@ def telemedicina_senal_view(request, videoconsulta_id):
             return JsonResponse({'ok': False, 'error': 'JSON inválido'}, status=400)
 
         tipo = payload.get('type')
+        if tipo in ['offer', 'answer', 'ice'] and videoconsulta.estadoConexion != 'En curso':
+            return JsonResponse({
+                'ok': False,
+                'error': 'Sala de espera activa: la señalización WebRTC inicia cuando el especialista admite al paciente.'
+            }, status=409)
+
         if tipo == 'reset':
             room_data = {'offer': None, 'answer': None, 'host_ice': [], 'guest_ice': [], 'host_online': False, 'guest_online': False}
         elif tipo == 'presence':
@@ -1017,13 +1111,14 @@ def telemedicina_senal_view(request, videoconsulta_id):
     room_data[f'{rol_local}_online'] = True
     cache.set(cache_key, room_data, timeout=3600)
 
+    sala_en_curso = videoconsulta.estadoConexion == 'En curso'
     return JsonResponse({
         'ok': True,
         'estadoConexion': videoconsulta.estadoConexion,
         'rol': rol_local,
-        'offer': room_data['offer'],
-        'answer': room_data['answer'],
-        'remote_ice': room_data['guest_ice'] if rol_local == 'host' else room_data['host_ice'],
+        'offer': room_data['offer'] if sala_en_curso else None,
+        'answer': room_data['answer'] if sala_en_curso else None,
+        'remote_ice': (room_data['guest_ice'] if rol_local == 'host' else room_data['host_ice']) if sala_en_curso else [],
         'peer_online': room_data['guest_online'] if rol_local == 'host' else room_data['host_online'],
     })
 
@@ -1281,4 +1376,95 @@ def caja_exportar_csv_view(request):
             p.estado,
         ])
     return response
+
+
+@login_required
+@rol_requerido(['Administrador', 'Recepcionista', 'Profesional'])
+def caja_reporte_liquidacion_view(request):
+    """
+    Reporte imprimible / exportable a PDF desde navegador de la cuadratura por medio de pago
+    y liquidación de honorarios de especialistas.
+    """
+    user = request.user
+    tz = timezone.get_current_timezone()
+
+    fecha_filtro = request.GET.get('fecha', '').strip()
+    estado_filtro = request.GET.get('estado', '').strip()
+    metodo_filtro = request.GET.get('metodo', '').strip()
+
+    try:
+        comision_pct = int(request.GET.get('comision', 30))
+        if comision_pct < 0 or comision_pct > 100:
+            comision_pct = 30
+    except ValueError:
+        comision_pct = 30
+
+    pagos_qs = Pago.objects.select_related(
+        'cita', 'cita__paciente', 'cita__profesional'
+    ).order_by('-fechaPago')
+
+    if user.es_profesional:
+        pagos_qs = pagos_qs.filter(cita__profesional=user.profesional) if hasattr(user, 'profesional') else Pago.objects.none()
+
+    if fecha_filtro:
+        try:
+            f_dt = datetime.strptime(fecha_filtro, '%Y-%m-%d').date()
+            ini_d = timezone.make_aware(datetime.combine(f_dt, time.min), tz)
+            fin_d = timezone.make_aware(datetime.combine(f_dt, time.max), tz)
+            pagos_qs = pagos_qs.filter(fechaPago__gte=ini_d, fechaPago__lte=fin_d)
+        except ValueError:
+            pass
+    if estado_filtro:
+        pagos_qs = pagos_qs.filter(estado=estado_filtro)
+    if metodo_filtro:
+        pagos_qs = pagos_qs.filter(metodoPago=metodo_filtro)
+
+    pagos_pagados = pagos_qs.filter(estado='Pagado')
+    total_recaudado = pagos_pagados.aggregate(total=Sum('monto'))['total'] or Decimal('0')
+    desglose_metodos = pagos_pagados.values('metodoPago').annotate(
+        total=Sum('monto'), cantidad=Count('id')
+    ).order_by('-total')
+
+    resumen_prof = {}
+    for p in pagos_pagados:
+        prof = p.cita.profesional
+        if prof.id not in resumen_prof:
+            resumen_prof[prof.id] = {
+                'profesional': prof,
+                'cantidad_citas': 0,
+                'monto_bruto': Decimal('0'),
+            }
+        resumen_prof[prof.id]['cantidad_citas'] += 1
+        resumen_prof[prof.id]['monto_bruto'] += p.monto
+
+    factor_comision = Decimal(comision_pct) / Decimal('100')
+    liquidaciones = []
+    total_comision = Decimal('0')
+    total_liquido = Decimal('0')
+
+    for item in resumen_prof.values():
+        comision_centro = (item['monto_bruto'] * factor_comision).quantize(Decimal('1'))
+        liquido_prof = item['monto_bruto'] - comision_centro
+        item['comision_centro'] = comision_centro
+        item['liquido_profesional'] = liquido_prof
+        total_comision += comision_centro
+        total_liquido += liquido_prof
+        liquidaciones.append(item)
+
+    liquidaciones.sort(key=lambda x: x['monto_bruto'], reverse=True)
+
+    return render(request, 'caja/reporte_liquidacion.html', {
+        'fecha_emision': timezone.localtime(),
+        'fecha_filtro': fecha_filtro,
+        'estado_filtro': estado_filtro,
+        'metodo_filtro': metodo_filtro,
+        'comision_pct': comision_pct,
+        'desglose_metodos': desglose_metodos,
+        'liquidaciones': liquidaciones,
+        'pagos_pagados': pagos_pagados,
+        'total_recaudado': total_recaudado,
+        'total_comision': total_comision,
+        'total_liquido': total_liquido,
+    })
+
 

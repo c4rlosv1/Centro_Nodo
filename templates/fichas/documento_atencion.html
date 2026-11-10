@@ -1,0 +1,129 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="page-header no-print">
+    <div>
+        <h2>
+            {% if tipo_doc == 'certificado' %}📜 Certificado de Asistencia Clínica
+            {% else %}📄 Resumen de Atención e Indicaciones Terapéuticas{% endif %}
+        </h2>
+        <p>Documento oficial imprimible / exportable a PDF desde navegador (Atención #{{ atencion.id }})</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'ficha_detalle' ficha.id %}" class="btn btn-secondary">← Volver a Ficha</a>
+        <div class="doc-tabs">
+            <a href="{% url 'atencion_documento' atencion.id %}?tipo=indicaciones" class="btn btn-sm {% if tipo_doc == 'indicaciones' %}btn-primary{% else %}btn-secondary{% endif %}">
+                📄 Resumen e Indicaciones
+            </a>
+            <a href="{% url 'atencion_documento' atencion.id %}?tipo=certificado" class="btn btn-sm {% if tipo_doc == 'certificado' %}btn-primary{% else %}btn-secondary{% endif %}">
+                📜 Certificado Asistencia
+            </a>
+        </div>
+        <button type="button" onclick="window.print()" class="btn btn-primary">🖨️ Imprimir / Guardar PDF</button>
+    </div>
+</div>
+
+<div class="receipt-card doc-sheet">
+    <div class="receipt-header">
+        <div>
+            <h2 style="margin-bottom: 0.2rem; color: var(--primary-color);">Centro Nodo</h2>
+            <p class="timeline-meta">Salud Mental Integral &bull; Manuel Antonio Matta 549, Osorno, Chile</p>
+            <p class="timeline-meta">Teléfono: +56 64 2 123 456 &bull; contacto@centronodo.cl</p>
+        </div>
+        <div style="text-align: right;">
+            <div style="font-size: 0.8rem; color: var(--text-secondary); text-transform: uppercase;">Folio Documento</div>
+            <strong style="font-size: 1.2rem;">DOC-AT-{{ atencion.id }}</strong><br>
+            <span class="status-badge status-realizada" style="margin-top: 0.35rem;">
+                {% if tipo_doc == 'certificado' %}Certificado de Asistencia{% else %}Indicaciones Clínicas{% endif %}
+            </span>
+        </div>
+    </div>
+
+    <div class="form-grid-2" style="margin-bottom: 1.5rem;">
+        <div class="info-kv-list">
+            <div class="info-kv-item">
+                <span class="info-kv-label">Paciente</span>
+                <span class="info-kv-value">{{ paciente.nombres }} {{ paciente.apellidos }}</span>
+            </div>
+            <div class="info-kv-item">
+                <span class="info-kv-label">RUT Paciente</span>
+                <span class="info-kv-value">{{ paciente.rut }}</span>
+            </div>
+            <div class="info-kv-item">
+                <span class="info-kv-label">Ficha Clínica</span>
+                <span class="info-kv-value">Expediente N° {{ ficha.id }}</span>
+            </div>
+        </div>
+
+        <div class="info-kv-list">
+            <div class="info-kv-item">
+                <span class="info-kv-label">Especialista Tratante</span>
+                <span class="info-kv-value">{{ profesional.nombres }} {{ profesional.apellidos }} ({{ profesional.especialidad }})</span>
+            </div>
+            <div class="info-kv-item">
+                <span class="info-kv-label">Registro Profesional de Salud</span>
+                <span class="info-kv-value">{{ profesional.registro_salud|default:"Registrado en Centro Nodo" }}</span>
+            </div>
+            <div class="info-kv-item">
+                <span class="info-kv-label">Fecha y Hora de Atención</span>
+                <span class="info-kv-value">
+                    {{ atencion.fechaHora|date:"d/m/Y H:i" }} hrs.
+                    {% if atencion.cita %}(Cita #{{ atencion.cita.id }}){% endif %}
+                </span>
+            </div>
+        </div>
+    </div>
+
+    {% if tipo_doc == 'certificado' %}
+        <div class="doc-certificate-body">
+            <h3 style="margin-bottom: 1rem;">CERTIFICADO DE ASISTENCIA A CONSULTA</h3>
+            <p>
+                El/La profesional <strong>{{ profesional.nombres }} {{ profesional.apellidos }}</strong>,
+                especialidad <strong>{{ profesional.especialidad }}</strong>{% if profesional.registro_salud %} (Reg. Salud N° {{ profesional.registro_salud }}){% endif %},
+                certifica que el/la paciente <strong>{{ paciente.nombres }} {{ paciente.apellidos }}</strong>,
+                RUT <strong>{{ paciente.rut }}</strong>, asistió efectivamente a atención clínica en
+                <strong>Centro Nodo — Salud Mental Integral</strong> el día
+                <strong>{{ atencion.fechaHora|date:"d/m/Y" }}</strong> a las
+                <strong>{{ atencion.fechaHora|date:"H:i" }} horas</strong>{% if atencion.cita %}, correspondiente a la consulta registrada con duración entre {{ atencion.cita.fechaHoraInicio|date:"H:i" }} y {{ atencion.cita.fechaHoraFin|date:"H:i" }} hrs{% endif %}.
+            </p>
+            <p style="margin-top: 1rem;">
+                Se extiende el presente certificado a solicitud del interesado/a para los fines laborales, académicos o administrativos que estime convenientes, resguardando estrictamente la reserva diagnóstica y confidencialidad de la ficha clínica.
+            </p>
+        </div>
+    {% else %}
+        <div class="doc-section">
+            <div class="clinical-block">
+                <div class="clinical-block-title">Diagnóstico / Impresión Clínica</div>
+                <p>{{ atencion.diagnostico|linebreaksbr }}</p>
+            </div>
+
+            <div class="clinical-block" style="margin-top: 1.25rem;">
+                <div class="clinical-block-title">Indicaciones Terapéuticas y Plan de Tratamiento</div>
+                <p>
+                    {% if atencion.indicacionesTratamiento %}
+                        {{ atencion.indicacionesTratamiento|linebreaksbr }}
+                    {% else %}
+                        Mantener plan terapéutico acordado durante la sesión y acudir a su próximo control programado.
+                    {% endif %}
+                </p>
+            </div>
+        </div>
+    {% endif %}
+
+    <div class="doc-signature-grid">
+        <div class="doc-signature-box">
+            <div class="doc-signature-line"></div>
+            <strong>{{ profesional.nombres }} {{ profesional.apellidos }}</strong><br>
+            <small class="timeline-meta">
+                {{ profesional.especialidad }}{% if profesional.registro_salud %} &bull; Reg. {{ profesional.registro_salud }}{% endif %}
+            </small>
+        </div>
+        <div class="doc-signature-box">
+            <div class="doc-signature-line"></div>
+            <strong>Centro Nodo — Dirección Clínica</strong><br>
+            <small class="timeline-meta">Osorno, {{ atencion.fechaHora|date:"d/m/Y" }} &bull; Documento digital válido</small>
+        </div>
+    </div>
+</div>
+{% endblock %}
+

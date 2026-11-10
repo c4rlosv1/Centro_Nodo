@@ -1,6 +1,10 @@
 import json
+from io import StringIO
 from datetime import timedelta
 from decimal import Decimal
+from django.core import mail
+from django.core.cache import cache
+from django.core.management import call_command
 from django.db import connection
 from django.test import TestCase, Client
 from django.urls import reverse
@@ -18,6 +22,7 @@ from clinica.models import (
     Pago,
     FichaClinica,
     AtencionClinica,
+    NotificacionCita,
 )
 from clinica.utils import validar_rut, formatear_rut
 
@@ -508,10 +513,28 @@ class CifradoYPartes3y4Tests(TestCase):
             fechaHoraInicio=inicio,
             fechaHoraFin=inicio + timedelta(minutes=45),
         )
-        vc = Videoconsulta.objects.create(cita=cita, urlSalaWebRTC='sala-webrtc-01')
+        vc = Videoconsulta.objects.create(cita=cita, urlSalaWebRTC='sala-webrtc-01', estadoConexion='En espera')
 
-        # Host envía offer
+        # 1. Sala de Espera Virtual bloquea SDP/ICE mientras no esté 'En curso' (HTTP 409)
         self.client.force_login(self.user_prof)
+        r_blocked_offer = self.client.post(
+            reverse('telemedicina_senal', args=[vc.id]),
+            data=json.dumps({'type': 'offer', 'sdp': {'type': 'offer', 'sdp': 'early-offer'}}),
+            content_type='application/json',
+        )
+        self.assertEqual(r_blocked_offer.status_code, 409)
+
+        # GET en sala de espera solo reporta presencia y estado, sin filtrar señales SDP
+        self.client.force_login(self.user_pac)
+        r_wait_guest = self.client.get(reverse('telemedicina_senal', args=[vc.id])).json()
+        self.assertEqual(r_wait_guest['estadoConexion'], 'En espera')
+        self.assertIsNone(r_wait_guest['offer'])
+        self.assertEqual(r_wait_guest['remote_ice'], [])
+
+        # 2. Especialista admite al paciente ('En curso') -> se habilita el intercambio WebRTC
+        self.client.force_login(self.user_prof)
+        self.client.post(reverse('telemedicina_estado', args=[vc.id]), {'estadoConexion': 'En curso'})
+
         r_offer = self.client.post(
             reverse('telemedicina_senal', args=[vc.id]),
             data=json.dumps({'type': 'offer', 'sdp': {'type': 'offer', 'sdp': 'fake-offer'}}),
@@ -522,6 +545,7 @@ class CifradoYPartes3y4Tests(TestCase):
         # Guest obtiene offer y envía answer + ICE
         self.client.force_login(self.user_pac)
         r_get_guest = self.client.get(reverse('telemedicina_senal', args=[vc.id]))
+        self.assertEqual(r_get_guest.json()['estadoConexion'], 'En curso')
         self.assertEqual(r_get_guest.json()['offer']['sdp'], 'fake-offer')
         self.client.post(
             reverse('telemedicina_senal', args=[vc.id]),
@@ -540,6 +564,16 @@ class CifradoYPartes3y4Tests(TestCase):
         self.assertEqual(r_get_host['answer']['sdp'], 'fake-answer')
         self.assertEqual(len(r_get_host['remote_ice']), 1)
         self.assertTrue(r_get_host['peer_online'])
+
+        # 3. Al finalizar sesión se limpia la caché de señalización y se vuelve a bloquear WebRTC
+        self.client.post(reverse('telemedicina_estado', args=[vc.id]), {'estadoConexion': 'Finalizada'})
+        self.assertIsNone(cache.get(f"webrtc_room_{vc.id}"))
+        r_after_end = self.client.post(
+            reverse('telemedicina_senal', args=[vc.id]),
+            data=json.dumps({'type': 'offer', 'sdp': {'type': 'offer', 'sdp': 'late-offer'}}),
+            content_type='application/json',
+        )
+        self.assertEqual(r_after_end.status_code, 409)
 
     def test_caja_pagos_liquidaciones_comprobante_y_csv(self):
         inicio = timezone.now() + timedelta(hours=5)
@@ -612,5 +646,677 @@ class CifradoYPartes3y4Tests(TestCase):
         csv_text = r_csv.content.decode('utf-8-sig')
         self.assertIn(pago1.numeroComprobante, csv_text)
         self.assertIn('Juan Pérez', csv_text)
+
+
+class Partes567Tests(TestCase):
+    def setUp(self):
+        self.rol_admin = Rol.objects.create(nombre='Administrador')
+        self.rol_prof = Rol.objects.create(nombre='Profesional')
+        self.rol_pac = Rol.objects.create(nombre='Paciente')
+        self.rol_recep = Rol.objects.create(nombre='Recepcionista')
+
+        self.user_prof1 = Usuario.objects.create_user(
+            username='prof_p5',
+            email='profp5@centronodo.cl',
+            password='password123',
+            first_name='Andrés',
+            last_name='Silva',
+            rol=self.rol_prof,
+        )
+        self.profesional1 = Profesional.objects.create(
+            usuario=self.user_prof1,
+            rut='15.342.980-4',
+            nombres='Andrés',
+            apellidos='Silva',
+            especialidad='Psiquiatría',
+            registro_salud='SIS-4455',
+        )
+
+        self.user_prof2 = Usuario.objects.create_user(
+            username='prof2_p5',
+            email='prof2p5@centronodo.cl',
+            password='password123',
+            first_name='Camila',
+            last_name='Rojas',
+            rol=self.rol_prof,
+        )
+        self.profesional2 = Profesional.objects.create(
+            usuario=self.user_prof2,
+            rut='17.654.321-3',
+            nombres='Camila',
+            apellidos='Rojas',
+            especialidad='Psicología Clínica',
+        )
+
+        self.user_recep = Usuario.objects.create_user(
+            username='recep_p5',
+            email='recepp5@centronodo.cl',
+            password='password123',
+            rol=self.rol_recep,
+        )
+
+        self.user_pac = Usuario.objects.create_user(
+            username='pac_p5',
+            email='pacp5@correo.cl',
+            password='password123',
+            first_name='Juan',
+            last_name='Pérez',
+            rol=self.rol_pac,
+        )
+        self.paciente = Paciente.objects.create(
+            usuario=self.user_pac,
+            rut='19.876.543-0',
+            nombres='Juan',
+            apellidos='Pérez',
+        )
+        self.ficha = FichaClinica.objects.create(paciente=self.paciente)
+
+        self.user_otro_pac = Usuario.objects.create_user(
+            username='pac2_p5',
+            email='pac2p5@correo.cl',
+            password='password123',
+            rol=self.rol_pac,
+        )
+        self.otro_paciente = Paciente.objects.create(
+            usuario=self.user_otro_pac,
+            rut='12.345.678-5',
+            nombres='María',
+            apellidos='Lagos',
+        )
+        FichaClinica.objects.create(paciente=self.otro_paciente)
+
+        self.paciente_sin_email = Paciente.objects.create(
+            usuario=None,
+            rut='11.222.333-9',
+            nombres='Carlos',
+            apellidos='Soto',
+        )
+        FichaClinica.objects.create(paciente=self.paciente_sin_email)
+
+        self.client = Client()
+
+    def test_documentos_clinicos_y_privacidad(self):
+        inicio = timezone.now() - timedelta(hours=2)
+        cita = Cita.objects.create(
+            paciente=self.paciente,
+            profesional=self.profesional1,
+            fechaHoraInicio=inicio,
+            fechaHoraFin=inicio + timedelta(minutes=45),
+            estado='Realizada',
+        )
+        atencion = AtencionClinica.objects.create(
+            fichaClinica=self.ficha,
+            cita=cita,
+            profesional=self.profesional1,
+            motivoConsulta='Consulta por insomnio crónico',
+            diagnostico='DIAGNOSTICO SENSIBLE TEST',
+            evolucionNotas='EVOLUCION CONFIDENCIAL SOLO CLINICO',
+            indicacionesTratamiento='Higiene del sueño y control en 14 días',
+        )
+
+        # Recepcionista y otro paciente NO pueden emitir documentos clínicos
+        self.client.force_login(self.user_recep)
+        self.assertEqual(self.client.get(reverse('atencion_documento', args=[atencion.id])).status_code, 302)
+
+        self.client.force_login(self.user_otro_pac)
+        self.assertEqual(self.client.get(reverse('atencion_documento', args=[atencion.id])).status_code, 302)
+
+        # Paciente titular en modo 'indicaciones': ve diagnóstico e indicaciones, NUNCA evolucionNotas
+        self.client.force_login(self.user_pac)
+        r_ind = self.client.get(reverse('atencion_documento', args=[atencion.id]), {'tipo': 'indicaciones'})
+        self.assertEqual(r_ind.status_code, 200)
+        html_ind = r_ind.content.decode('utf-8')
+        self.assertIn('DIAGNOSTICO SENSIBLE TEST', html_ind)
+        self.assertIn('Higiene del sueño y control en 14 días', html_ind)
+        self.assertNotIn('EVOLUCION CONFIDENCIAL SOLO CLINICO', html_ind)
+
+        # Paciente titular en modo 'certificado': omite diagnóstico, indicaciones y evolucionNotas
+        r_cert = self.client.get(reverse('atencion_documento', args=[atencion.id]), {'tipo': 'certificado'})
+        self.assertEqual(r_cert.status_code, 200)
+        html_cert = r_cert.content.decode('utf-8')
+        self.assertIn('CERTIFICADO DE ASISTENCIA A CONSULTA', html_cert)
+        self.assertIn('19.876.543-0', html_cert)
+        self.assertIn('SIS-4455', html_cert)
+        self.assertNotIn('DIAGNOSTICO SENSIBLE TEST', html_cert)
+        self.assertNotIn('Higiene del sueño y control en 14 días', html_cert)
+        self.assertNotIn('EVOLUCION CONFIDENCIAL SOLO CLINICO', html_cert)
+
+        # Profesional sí accede pero el entregable impreso jamás incluye evolucionNotas
+        self.client.force_login(self.user_prof1)
+        r_prof = self.client.get(reverse('atencion_documento', args=[atencion.id]), {'tipo': 'indicaciones'})
+        self.assertEqual(r_prof.status_code, 200)
+        self.assertNotIn('EVOLUCION CONFIDENCIAL SOLO CLINICO', r_prof.content.decode('utf-8'))
+
+    def test_caja_reporte_liquidacion_y_rbac(self):
+        inicio = timezone.now() - timedelta(hours=3)
+        c1 = Cita.objects.create(
+            paciente=self.paciente,
+            profesional=self.profesional1,
+            fechaHoraInicio=inicio,
+            fechaHoraFin=inicio + timedelta(minutes=45),
+            estado='Realizada',
+        )
+        c2 = Cita.objects.create(
+            paciente=self.otro_paciente,
+            profesional=self.profesional2,
+            fechaHoraInicio=inicio + timedelta(hours=1),
+            fechaHoraFin=inicio + timedelta(hours=1, minutes=45),
+            estado='Realizada',
+        )
+        Pago.objects.create(
+            cita=c1, monto=Decimal('60000'), metodoPago='Transferencia', estado='Pagado', numeroComprobante='CMP-REP-1'
+        )
+        Pago.objects.create(
+            cita=c2, monto=Decimal('40000'), metodoPago='Débito', estado='Pagado', numeroComprobante='CMP-REP-2'
+        )
+
+        # Paciente no puede acceder al reporte financiero de liquidación
+        self.client.force_login(self.user_pac)
+        self.assertEqual(self.client.get(reverse('caja_reporte_liquidacion')).status_code, 302)
+
+        # Profesional 1 solo ve sus propios honorarios
+        self.client.force_login(self.user_prof1)
+        r_prof = self.client.get(reverse('caja_reporte_liquidacion'), {'comision': 30})
+        self.assertEqual(r_prof.status_code, 200)
+        self.assertEqual(r_prof.context['total_recaudado'], Decimal('60000'))
+        self.assertEqual(r_prof.context['total_comision'], Decimal('18000'))
+        self.assertEqual(r_prof.context['total_liquido'], Decimal('42000'))
+        self.assertEqual(len(r_prof.context['liquidaciones']), 1)
+
+        # Recepcionista ve reporte consolidado de ambos especialistas
+        self.client.force_login(self.user_recep)
+        r_recep = self.client.get(reverse('caja_reporte_liquidacion'), {'comision': 25})
+        self.assertEqual(r_recep.status_code, 200)
+        self.assertEqual(r_recep.context['total_recaudado'], Decimal('100000'))
+        self.assertEqual(r_recep.context['total_comision'], Decimal('25000'))
+        self.assertEqual(r_recep.context['total_liquido'], Decimal('75000'))
+        self.assertEqual(len(r_recep.context['liquidaciones']), 2)
+        html_rep = r_recep.content.decode('utf-8')
+        self.assertIn('CMP-REP-1', html_rep)
+        self.assertIn('CMP-REP-2', html_rep)
+
+    def test_notificaciones_automaticas_manuales_y_recordatorios(self):
+        mail.outbox.clear()
+        self.client.force_login(self.user_recep)
+        fecha_str = (timezone.localdate() + timedelta(days=3)).strftime('%Y-%m-%d')
+
+        # 1. Al agendar cita se envían correos automáticos al paciente y profesional
+        r_ag = self.client.post(reverse('agendamiento'), {
+            'paciente': self.paciente.id,
+            'profesional': self.profesional1.id,
+            'fecha': fecha_str,
+            'hora_inicio': '15:00',
+            'duracion_minutos': 45,
+            'es_telemedicina': True,
+        })
+        self.assertEqual(r_ag.status_code, 302)
+        cita = Cita.objects.first()
+        self.assertEqual(len(mail.outbox), 2)
+        self.assertEqual(NotificacionCita.objects.filter(cita=cita, tipo='Agendamiento', exitoso=True).count(), 2)
+
+        # 2. Al confirmar cita se envía correo de Confirmación al paciente
+        mail.outbox.clear()
+        self.client.post(reverse('cita_cambiar_estado', args=[cita.id]), {'estado': 'Confirmada'})
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertEqual(mail.outbox[0].to, ['pacp5@correo.cl'])
+        self.assertTrue(NotificacionCita.objects.filter(cita=cita, tipo='Confirmación', exitoso=True).exists())
+
+        # 3. Envío manual de recordatorio desde Agenda
+        mail.outbox.clear()
+        r_rec = self.client.post(reverse('cita_enviar_recordatorio', args=[cita.id]))
+        self.assertEqual(r_rec.status_code, 302)
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertTrue(NotificacionCita.objects.filter(cita=cita, tipo='Recordatorio', exitoso=True).exists())
+
+        # 4. Paciente sin correo registrado no rompe el flujo de recordatorio manual
+        cita_sin_email = Cita.objects.create(
+            paciente=self.paciente_sin_email,
+            profesional=self.profesional1,
+            fechaHoraInicio=timezone.now() + timedelta(hours=10),
+            fechaHoraFin=timezone.now() + timedelta(hours=10, minutes=45),
+            estado='Agendada',
+        )
+        mail.outbox.clear()
+        r_sin_mail = self.client.post(reverse('cita_enviar_recordatorio', args=[cita_sin_email.id]))
+        self.assertEqual(r_sin_mail.status_code, 302)
+        self.assertEqual(len(mail.outbox), 0)
+
+        # 5. Al cancelar cita se notifica al paciente y al profesional
+        self.client.post(reverse('cita_cambiar_estado', args=[cita.id]), {'estado': 'Cancelada'})
+        self.assertEqual(len(mail.outbox), 2)
+        self.assertEqual(NotificacionCita.objects.filter(cita=cita, tipo='Cancelación', exitoso=True).count(), 2)
+
+        # 6. Comando programar recordatorios 24h sin duplicados
+        mail.outbox.clear()
+        cita_elegible = Cita.objects.create(
+            paciente=self.otro_paciente,
+            profesional=self.profesional2,
+            fechaHoraInicio=timezone.now() + timedelta(hours=12),
+            fechaHoraFin=timezone.now() + timedelta(hours=12, minutes=45),
+            estado='Confirmada',
+        )
+        # Cita fuera de ventana (> 24h)
+        Cita.objects.create(
+            paciente=self.otro_paciente,
+            profesional=self.profesional2,
+            fechaHoraInicio=timezone.now() + timedelta(hours=40),
+            fechaHoraFin=timezone.now() + timedelta(hours=40, minutes=45),
+            estado='Agendada',
+        )
+        # Cita cancelada en ventana (no debe enviarse)
+        Cita.objects.create(
+            paciente=self.otro_paciente,
+            profesional=self.profesional1,
+            fechaHoraInicio=timezone.now() + timedelta(hours=8),
+            fechaHoraFin=timezone.now() + timedelta(hours=8, minutes=45),
+            estado='Cancelada',
+        )
+
+        out = StringIO()
+        call_command('enviar_recordatorios_citas', horas=24, stdout=out)
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertEqual(mail.outbox[0].to, ['pac2p5@correo.cl'])
+        self.assertTrue(NotificacionCita.objects.filter(cita=cita_elegible, tipo='Recordatorio', exitoso=True).exists())
+
+        # Segunda ejecución en la misma ventana no duplica recordatorios
+        mail.outbox.clear()
+        out2 = StringIO()
+        call_command('enviar_recordatorios_citas', horas=24, stdout=out2)
+        self.assertEqual(len(mail.outbox), 0)
+
+
+class SuiteCompleta7FasesYSeguridadTests(TestCase):
+    """
+    Pruebas integrales de seguridad, RBAC, colisiones límite de agenda y flujos
+    cruzados a través de las 7 Fases del sistema.
+    """
+
+    def setUp(self):
+        self.rol_admin = Rol.objects.create(nombre='Administrador')
+        self.rol_prof = Rol.objects.create(nombre='Profesional')
+        self.rol_pac = Rol.objects.create(nombre='Paciente')
+        self.rol_recep = Rol.objects.create(nombre='Recepcionista')
+
+        self.user_prof1 = Usuario.objects.create_user(
+            username='prof1_s',
+            email='prof1s@centronodo.cl',
+            password='password123',
+            first_name='Andrés',
+            last_name='Silva',
+            rol=self.rol_prof,
+        )
+        self.prof1 = Profesional.objects.create(
+            usuario=self.user_prof1,
+            rut='15.342.980-4',
+            nombres='Andrés',
+            apellidos='Silva',
+            especialidad='Psiquiatría',
+        )
+
+        self.user_prof2 = Usuario.objects.create_user(
+            username='prof2_s',
+            email='prof2s@centronodo.cl',
+            password='password123',
+            first_name='Camila',
+            last_name='Rojas',
+            rol=self.rol_prof,
+        )
+        self.prof2 = Profesional.objects.create(
+            usuario=self.user_prof2,
+            rut='17.654.321-3',
+            nombres='Camila',
+            apellidos='Rojas',
+            especialidad='Psicología Clínica',
+        )
+
+        self.user_recep = Usuario.objects.create_user(
+            username='recep_s',
+            email='receps@centronodo.cl',
+            password='password123',
+            rol=self.rol_recep,
+        )
+
+        self.user_pac1 = Usuario.objects.create_user(
+            username='pac1_s',
+            email='pac1s@correo.cl',
+            password='password123',
+            first_name='Juan',
+            last_name='Pérez',
+            rol=self.rol_pac,
+        )
+        self.pac1 = Paciente.objects.create(
+            usuario=self.user_pac1,
+            rut='19.876.543-0',
+            nombres='Juan',
+            apellidos='Pérez',
+        )
+        self.ficha1 = FichaClinica.objects.create(
+            paciente=self.pac1,
+            antecedentesMedicos='Antecedente privado pac1',
+        )
+
+        self.user_pac2 = Usuario.objects.create_user(
+            username='pac2_s',
+            email='pac2s@correo.cl',
+            password='password123',
+            first_name='María',
+            last_name='Lagos',
+            rol=self.rol_pac,
+        )
+        self.pac2 = Paciente.objects.create(
+            usuario=self.user_pac2,
+            rut='12.345.678-5',
+            nombres='María',
+            apellidos='Lagos',
+        )
+        self.ficha2 = FichaClinica.objects.create(
+            paciente=self.pac2,
+            antecedentesMedicos='Antecedente privado pac2',
+        )
+
+        self.user_inactivo = Usuario.objects.create_user(
+            username='inactivo_s',
+            email='inactivos@correo.cl',
+            password='password123',
+            rol=self.rol_pac,
+            activo=False,
+        )
+
+        self.client = Client()
+
+    def test_fase0_autenticacion_y_rutas_protegidas(self):
+        rutas_privadas = [
+            reverse('dashboard'),
+            reverse('pacientes_lista'),
+            reverse('fichas_lista'),
+            reverse('agendamiento'),
+            reverse('telemedicina'),
+            reverse('caja'),
+            reverse('caja_reporte_liquidacion'),
+        ]
+        for ruta in rutas_privadas:
+            resp = self.client.get(ruta)
+            self.assertEqual(resp.status_code, 302, f"La ruta {ruta} debe exigir login")
+            self.assertIn(reverse('login'), resp.url)
+
+        # Login por username
+        r_user = self.client.post(reverse('login'), {'login_id': 'pac1_s', 'password': 'password123'})
+        self.assertEqual(r_user.status_code, 302)
+        self.assertEqual(int(self.client.session['_auth_user_id']), self.user_pac1.id)
+        self.client.get(reverse('logout'))
+        self.assertNotIn('_auth_user_id', self.client.session)
+
+        # Login por correo electrónico
+        r_mail = self.client.post(reverse('login'), {'login_id': 'pac1s@correo.cl', 'password': 'password123'})
+        self.assertEqual(r_mail.status_code, 302)
+        self.assertEqual(int(self.client.session['_auth_user_id']), self.user_pac1.id)
+        self.client.get(reverse('logout'))
+
+        # Usuario inactivo no puede iniciar sesión
+        r_inact = self.client.post(reverse('login'), {'login_id': 'inactivos@correo.cl', 'password': 'password123'})
+        self.assertEqual(r_inact.status_code, 200)
+        self.assertNotIn('_auth_user_id', self.client.session)
+
+    def test_fase1_acceso_cruzado_fichas_y_rut_duplicado(self):
+        # 1. Rechazar creación de paciente con RUT ya existente (con distinto formato)
+        self.client.force_login(self.user_recep)
+        total_antes = Paciente.objects.count()
+        r_dup = self.client.post(reverse('paciente_crear'), {
+            'rut': '19876543-0',
+            'nombres': 'Clon',
+            'apellidos': 'Duplicado',
+        })
+        self.assertEqual(r_dup.status_code, 200)
+        self.assertEqual(Paciente.objects.count(), total_antes)
+
+        # 2. Recepcionista NO puede leer ni editar fichas ni registrar atenciones directamente
+        self.assertEqual(self.client.get(reverse('ficha_detalle', args=[self.ficha1.id])).status_code, 302)
+        self.client.post(
+            reverse('ficha_editar_antecedentes', args=[self.ficha1.id]),
+            {'grupoSanguineo': 'AB-', 'alergias': 'HACK', 'antecedentesMedicos': 'HACK'},
+        )
+        self.client.post(
+            reverse('atencion_crear', args=[self.ficha1.id]),
+            {'profesional': self.prof1.id, 'motivoConsulta': 'x', 'diagnostico': 'y'},
+        )
+        self.ficha1.refresh_from_db()
+        self.assertEqual(self.ficha1.antecedentesMedicos, 'Antecedente privado pac1')
+        self.assertEqual(AtencionClinica.objects.filter(fichaClinica=self.ficha1).count(), 0)
+
+        # 3. Paciente 1 entra a /fichas/ -> redirige exclusivamente a su propia ficha
+        self.client.force_login(self.user_pac1)
+        r_list_pac1 = self.client.get(reverse('fichas_lista'))
+        self.assertRedirects(r_list_pac1, reverse('ficha_detalle', args=[self.ficha1.id]))
+
+        # 4. Paciente 2 NO puede ver ni modificar ficha ni perfil del Paciente 1
+        self.client.force_login(self.user_pac2)
+        self.assertEqual(self.client.get(reverse('ficha_detalle', args=[self.ficha1.id])).status_code, 302)
+        self.assertEqual(self.client.get(reverse('paciente_detalle', args=[self.pac1.id])).status_code, 302)
+        self.assertEqual(self.client.get(reverse('paciente_crear')).status_code, 302)
+
+        self.client.post(
+            reverse('ficha_editar_antecedentes', args=[self.ficha1.id]),
+            {'grupoSanguineo': 'O-', 'alergias': 'HACK', 'antecedentesMedicos': 'ALTERADO'},
+        )
+        self.ficha1.refresh_from_db()
+        self.assertEqual(self.ficha1.antecedentesMedicos, 'Antecedente privado pac1')
+
+    def test_fase2_colisiones_paciente_bordes_y_cancelacion(self):
+        manana = (timezone.localdate() + timedelta(days=3)).strftime('%Y-%m-%d')
+        ayer = (timezone.localdate() - timedelta(days=1)).strftime('%Y-%m-%d')
+
+        self.client.force_login(self.user_recep)
+
+        # 1. Rechazar cita en fecha pasada
+        r_past = self.client.post(reverse('agendamiento'), {
+            'paciente': self.pac1.id,
+            'profesional': self.prof1.id,
+            'fecha': ayer,
+            'hora_inicio': '10:00',
+            'duracion_minutos': 45,
+        })
+        self.assertEqual(r_past.status_code, 200)
+        self.assertEqual(Cita.objects.count(), 0)
+
+        # 2. Cita base: pac1 con prof1 de 14:00 a 14:45
+        r_base = self.client.post(reverse('agendamiento'), {
+            'paciente': self.pac1.id,
+            'profesional': self.prof1.id,
+            'fecha': manana,
+            'hora_inicio': '14:00',
+            'duracion_minutos': 45,
+        })
+        self.assertEqual(r_base.status_code, 302)
+        self.assertEqual(Cita.objects.count(), 1)
+        cita_base = Cita.objects.first()
+
+        # 3. Mismo paciente pac1 con OTRO profesional (prof2) en horario solapado (14:15 - 15:00) -> rechazado
+        r_same_pac = self.client.post(reverse('agendamiento'), {
+            'paciente': self.pac1.id,
+            'profesional': self.prof2.id,
+            'fecha': manana,
+            'hora_inicio': '14:15',
+            'duracion_minutos': 45,
+        })
+        self.assertEqual(r_same_pac.status_code, 200)
+        self.assertEqual(Cita.objects.count(), 1)
+
+        # 4. Solapamiento previo parcial (13:30 - 14:15 con prof1) -> rechazado
+        r_prev_overlap = self.client.post(reverse('agendamiento'), {
+            'paciente': self.pac2.id,
+            'profesional': self.prof1.id,
+            'fecha': manana,
+            'hora_inicio': '13:30',
+            'duracion_minutos': 45,
+        })
+        self.assertEqual(r_prev_overlap.status_code, 200)
+        self.assertEqual(Cita.objects.count(), 1)
+
+        # 5. Horario contiguo exacto al término (14:45 - 15:30 con prof1 para pac2) -> permitido
+        r_edge = self.client.post(reverse('agendamiento'), {
+            'paciente': self.pac2.id,
+            'profesional': self.prof1.id,
+            'fecha': manana,
+            'hora_inicio': '14:45',
+            'duracion_minutos': 45,
+        })
+        self.assertEqual(r_edge.status_code, 302)
+        self.assertEqual(Cita.objects.count(), 2)
+
+        # 6. Cancelar cita_base libera el bloque de 14:00 a 14:45 para otro paciente
+        self.client.post(reverse('cita_cambiar_estado', args=[cita_base.id]), {'estado': 'Cancelada'})
+        cita_base.refresh_from_db()
+        self.assertEqual(cita_base.estado, 'Cancelada')
+
+        r_rebook = self.client.post(reverse('agendamiento'), {
+            'paciente': self.pac2.id,
+            'profesional': self.prof1.id,
+            'fecha': manana,
+            'hora_inicio': '14:00',
+            'duracion_minutos': 45,
+        })
+        self.assertEqual(r_rebook.status_code, 302)
+        self.assertEqual(Cita.objects.filter(estado='Agendada').count(), 2)
+
+        # 7. Bloqueo horario: crear, verificar rechazo y eliminar para liberar el bloque
+        self.client.post(reverse('bloqueo_crear'), {
+            'profesional': self.prof2.id,
+            'fecha': manana,
+            'hora_inicio': '16:00',
+            'hora_fin': '17:00',
+            'motivo': 'Comité',
+        })
+        bloqueo = BloqueoHorario.objects.first()
+
+        # Paciente no puede eliminar bloqueos ni cancelar citas de otro paciente ni agendar por otro paciente
+        self.client.force_login(self.user_pac1)
+        self.client.post(reverse('bloqueo_eliminar', args=[bloqueo.id]))
+        bloqueo.refresh_from_db()
+        self.assertEqual(bloqueo.estado, 'Activo')
+
+        cita_pac2 = Cita.objects.filter(paciente=self.pac2, estado='Agendada').first()
+        self.client.post(reverse('cita_cambiar_estado', args=[cita_pac2.id]), {'estado': 'Cancelada'})
+        cita_pac2.refresh_from_db()
+        self.assertEqual(cita_pac2.estado, 'Agendada')
+
+        # Si pac1 intenta enviar paciente=pac2 en POST, el formulario rechaza el ID ajeno
+        total_citas_antes = Cita.objects.count()
+        r_forged = self.client.post(reverse('agendamiento'), {
+            'paciente': self.pac2.id,
+            'profesional': self.prof2.id,
+            'fecha': manana,
+            'hora_inicio': '11:00',
+            'duracion_minutos': 45,
+        })
+        self.assertEqual(r_forged.status_code, 200)
+        self.assertEqual(Cita.objects.count(), total_citas_antes)
+
+        # Y si pac1 envía su propio ID, agenda correctamente
+        r_self = self.client.post(reverse('agendamiento'), {
+            'paciente': self.pac1.id,
+            'profesional': self.prof2.id,
+            'fecha': manana,
+            'hora_inicio': '11:00',
+            'duracion_minutos': 45,
+        })
+        self.assertEqual(r_self.status_code, 302)
+        cita_nueva = Cita.objects.order_by('-id').first()
+        self.assertEqual(cita_nueva.paciente, self.pac1)
+
+        # Recepcionista desactiva bloqueo y vuelve a estar disponible 16:00 - 16:45
+        self.client.force_login(self.user_recep)
+        self.client.post(reverse('bloqueo_eliminar', args=[bloqueo.id]))
+        bloqueo.refresh_from_db()
+        self.assertEqual(bloqueo.estado, 'Inactivo')
+        r_after_unblock = self.client.post(reverse('agendamiento'), {
+            'paciente': self.pac1.id,
+            'profesional': self.prof2.id,
+            'fecha': manana,
+            'hora_inicio': '16:00',
+            'duracion_minutos': 45,
+        })
+        self.assertEqual(r_after_unblock.status_code, 302)
+
+    def test_fase4_caja_anulacion_y_permisos_escritura(self):
+        inicio = timezone.now() + timedelta(hours=4)
+        cita = Cita.objects.create(
+            paciente=self.pac1,
+            profesional=self.prof1,
+            fechaHoraInicio=inicio,
+            fechaHoraFin=inicio + timedelta(minutes=45),
+            estado='Realizada',
+        )
+        pago = Pago.objects.create(
+            cita=cita,
+            monto=Decimal('45000'),
+            metodoPago='Transferencia',
+            estado='Pagado',
+            numeroComprobante='CMP-ANUL-01',
+        )
+
+        # Paciente y Profesional NO pueden crear ni anular pagos
+        for u in [self.user_pac1, self.user_prof1]:
+            self.client.force_login(u)
+            self.client.post(reverse('caja'), {
+                'cita': cita.id, 'monto': '10000', 'prevision': 'Particular', 'metodoPago': 'Efectivo', 'estado': 'Pagado'
+            })
+            self.assertEqual(Pago.objects.count(), 1)
+            self.client.post(reverse('pago_cambiar_estado', args=[pago.id]), {'estado': 'Anulado'})
+            pago.refresh_from_db()
+            self.assertEqual(pago.estado, 'Pagado')
+
+        # Recepcionista anula pago y desaparece del cálculo de liquidación/reporte
+        self.client.force_login(self.user_recep)
+        self.client.post(reverse('pago_cambiar_estado', args=[pago.id]), {'estado': 'Anulado'})
+        pago.refresh_from_db()
+        self.assertEqual(pago.estado, 'Anulado')
+
+        r_rep = self.client.get(reverse('caja_reporte_liquidacion'))
+        self.assertEqual(r_rep.status_code, 200)
+        self.assertEqual(r_rep.context['total_recaudado'], Decimal('0'))
+        self.assertEqual(len(r_rep.context['liquidaciones']), 0)
+
+    def test_fase5_telemedicina_aislamiento_salas_y_senal_403(self):
+        inicio = timezone.now() + timedelta(hours=2)
+        c1 = Cita.objects.create(
+            paciente=self.pac1, profesional=self.prof1, fechaHoraInicio=inicio, fechaHoraFin=inicio + timedelta(minutes=45)
+        )
+        c2 = Cita.objects.create(
+            paciente=self.pac2, profesional=self.prof2, fechaHoraInicio=inicio, fechaHoraFin=inicio + timedelta(minutes=45)
+        )
+        vc1 = Videoconsulta.objects.create(cita=c1, urlSalaWebRTC='sala-iso-1', estadoConexion='En curso')
+        Videoconsulta.objects.create(cita=c2, urlSalaWebRTC='sala-iso-2', estadoConexion='En curso')
+
+        # Listado filtrado por rol
+        self.client.force_login(self.user_pac1)
+        r_list = self.client.get(reverse('telemedicina'))
+        self.assertEqual(r_list.status_code, 200)
+        self.assertEqual(list(r_list.context['videoconsultas']), [vc1])
+
+        # Otro paciente y Recepcionista reciben 403 en endpoints WebRTC de vc1
+        for u in [self.user_pac2, self.user_recep]:
+            self.client.force_login(u)
+            self.assertEqual(self.client.get(reverse('telemedicina_senal', args=[vc1.id])).status_code, 403)
+            self.assertEqual(
+                self.client.post(reverse('telemedicina_estado', args=[vc1.id]), {'estadoConexion': 'Finalizada'}).status_code,
+                403,
+            )
+
+    def test_fase7_recordatorios_dry_run_no_envia(self):
+        mail.outbox.clear()
+        Cita.objects.create(
+            paciente=self.pac1,
+            profesional=self.prof1,
+            fechaHoraInicio=timezone.now() + timedelta(hours=6),
+            fechaHoraFin=timezone.now() + timedelta(hours=6, minutes=45),
+            estado='Agendada',
+        )
+        out = StringIO()
+        call_command('enviar_recordatorios_citas', horas=24, dry_run=True, stdout=out)
+        self.assertEqual(len(mail.outbox), 0)
+        self.assertEqual(NotificacionCita.objects.count(), 0)
+        self.assertIn('[DRY-RUN]', out.getvalue())
+
+
 
 

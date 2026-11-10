@@ -260,3 +260,24 @@ class AtencionClinica(models.Model):
 
     def __str__(self):
         return f"Atención #{self.id} - Ficha #{self.fichaClinica.id} ({self.profesional.nombres})"
+
+
+class NotificacionCita(models.Model):
+    """
+    Registro de correos electrónicos y recordatorios enviados asociados a una cita médica.
+    """
+    id = models.AutoField(primary_key=True)
+    cita = models.ForeignKey(Cita, on_delete=models.CASCADE, related_name='notificaciones')
+    tipo = models.CharField(max_length=50)  # Agendamiento, Confirmación, Cancelación, Recordatorio, Actualización
+    destinatario = models.EmailField()
+    asunto = models.CharField(max_length=255)
+    enviadoEn = models.DateTimeField(default=timezone.now)
+    exitoso = models.BooleanField(default=True)
+    detalleError = models.CharField(max_length=255, blank=True, null=True)
+
+    class Meta:
+        app_label = 'clinica'
+        db_table = 'notificacion_cita'
+
+    def __str__(self):
+        return f"Notificación {self.tipo} - Cita #{self.cita.id} ({self.destinatario})"

@@ -1,0 +1,158 @@
+{% extends 'base.html' %}
+{% load clinica_extras %}
+
+{% block content %}
+<div class="page-header no-print">
+    <div>
+        <h2>📊 Reporte de Cuadratura de Caja y Liquidación de Honorarios</h2>
+        <p>Resumen oficial consolidado imprimible / exportable a PDF desde navegador</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'caja' %}?fecha={{ fecha_filtro|urlencode }}&estado={{ estado_filtro|urlencode }}&metodo={{ metodo_filtro|urlencode }}&comision={{ comision_pct }}" class="btn btn-secondary">
+            ← Volver a Caja
+        </a>
+        <button type="button" onclick="window.print()" class="btn btn-primary">🖨️ Imprimir / Guardar PDF</button>
+    </div>
+</div>
+
+<div class="receipt-card doc-sheet-wide">
+    <div class="receipt-header">
+        <div>
+            <h2 style="margin-bottom: 0.2rem; color: var(--primary-color);">Centro Nodo</h2>
+            <p class="timeline-meta">Salud Mental Integral &bull; Manuel Antonio Matta 549, Osorno, Chile</p>
+            <p class="timeline-meta">Reporte de Cuadratura de Caja y Honorarios Médicos</p>
+        </div>
+        <div style="text-align: right;">
+            <div style="font-size: 0.8rem; color: var(--text-secondary); text-transform: uppercase;">Fecha de Emisión</div>
+            <strong>{{ fecha_emision|date:"d/m/Y H:i" }}</strong><br>
+            <span class="timeline-meta">Comisión Centro Aplicada: <strong>{{ comision_pct }}%</strong></span><br>
+            <span class="timeline-meta">
+                Filtros:
+                {% if fecha_filtro %}Fecha {{ fecha_filtro }}{% else %}Todo el período{% endif %}
+                {% if metodo_filtro %} &bull; {{ metodo_filtro }}{% endif %}
+                {% if estado_filtro %} &bull; {{ estado_filtro }}{% endif %}
+            </span>
+        </div>
+    </div>
+
+    <div class="doc-kpi-row">
+        <div class="doc-kpi-box">
+            <span class="info-kv-label">Total Recaudado (Pagados)</span>
+            <div class="doc-kpi-val">{{ total_recaudado|clp }}</div>
+        </div>
+        <div class="doc-kpi-box">
+            <span class="info-kv-label">Comisión Centro ({{ comision_pct }}%)</span>
+            <div class="doc-kpi-val">{{ total_comision|clp }}</div>
+        </div>
+        <div class="doc-kpi-box">
+            <span class="info-kv-label">Líquido a Especialistas</span>
+            <div class="doc-kpi-val" style="color: #16a34a;">{{ total_liquido|clp }}</div>
+        </div>
+    </div>
+
+    <h3 style="margin: 1.5rem 0 0.75rem;">1. Cuadratura por Medio de Pago</h3>
+    {% if desglose_metodos %}
+        <div class="table-wrapper" style="margin-bottom: 1.5rem;">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Medio de Pago</th>
+                        <th>Cantidad de Transacciones</th>
+                        <th>Total Recaudado</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in desglose_metodos %}
+                    <tr>
+                        <td><strong>{{ item.metodoPago }}</strong></td>
+                        <td>{{ item.cantidad }}</td>
+                        <td><strong>{{ item.total|clp }}</strong></td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    {% else %}
+        <p class="timeline-meta" style="margin-bottom: 1.5rem;">No hay ingresos pagados para los filtros seleccionados.</p>
+    {% endif %}
+
+    <h3 style="margin: 1.5rem 0 0.75rem;">2. Liquidación de Honorarios por Especialista</h3>
+    {% if liquidaciones %}
+        <div class="table-wrapper" style="margin-bottom: 1.5rem;">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Especialista</th>
+                        <th>Consultas</th>
+                        <th>Monto Bruto</th>
+                        <th>Comisión Centro ({{ comision_pct }}%)</th>
+                        <th>Líquido a Pagar</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for liq in liquidaciones %}
+                    <tr>
+                        <td>
+                            <strong>{{ liq.profesional.nombres }} {{ liq.profesional.apellidos }}</strong><br>
+                            <small class="timeline-meta">{{ liq.profesional.especialidad }}</small>
+                        </td>
+                        <td>{{ liq.cantidad_citas }}</td>
+                        <td>{{ liq.monto_bruto|clp }}</td>
+                        <td>{{ liq.comision_centro|clp }}</td>
+                        <td><strong>{{ liq.liquido_profesional|clp }}</strong></td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    {% else %}
+        <p class="timeline-meta" style="margin-bottom: 1.5rem;">Sin movimientos pagados para liquidar en este período.</p>
+    {% endif %}
+
+    <h3 style="margin: 1.5rem 0 0.75rem;">3. Detalle de Movimientos Pagados ({{ pagos_pagados.count }})</h3>
+    {% if pagos_pagados %}
+        <div class="table-wrapper">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Comprobante</th>
+                        <th>Fecha Pago</th>
+                        <th>Paciente</th>
+                        <th>Especialista</th>
+                        <th>Previsión / Medio</th>
+                        <th>Monto</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for p in pagos_pagados %}
+                    <tr>
+                        <td><code>{{ p.numeroComprobante|default:p.id }}</code></td>
+                        <td>{{ p.fechaPago|date:"d/m/Y H:i" }}</td>
+                        <td>{{ p.cita.paciente.nombres }} {{ p.cita.paciente.apellidos }} ({{ p.cita.paciente.rut }})</td>
+                        <td>{{ p.cita.profesional.nombres }} {{ p.cita.profesional.apellidos }}</td>
+                        <td>{{ p.prevision }} &bull; {{ p.metodoPago }}</td>
+                        <td><strong>{{ p.monto|clp }}</strong></td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    {% else %}
+        <p class="timeline-meta">No existen movimientos pagados en el rango filtrado.</p>
+    {% endif %}
+
+    <div class="doc-signature-grid">
+        <div class="doc-signature-box">
+            <div class="doc-signature-line"></div>
+            <strong>Administración / Caja Centro Nodo</strong><br>
+            <small class="timeline-meta">Responsable de cuadratura</small>
+        </div>
+        <div class="doc-signature-box">
+            <div class="doc-signature-line"></div>
+            <strong>V°B° Recepción / Dirección</strong><br>
+            <small class="timeline-meta">Emitido el {{ fecha_emision|date:"d/m/Y" }}</small>
+        </div>
+    </div>
+</div>
+{% endblock %}
+

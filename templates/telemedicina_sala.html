@@ -32,16 +32,38 @@
             <small id="peer-presence-text" class="timeline-meta">Iniciando señalización...</small>
         </div>
 
+        <div id="waiting-room-banner" class="waiting-banner {% if videoconsulta.estadoConexion == 'En curso' %}waiting-banner-live{% elif videoconsulta.estadoConexion == 'Finalizada' %}waiting-banner-ended{% else %}waiting-banner-alert{% endif %}">
+            {% if videoconsulta.estadoConexion == 'En curso' %}
+                🟢 Consulta en curso — canal WebRTC P2P habilitado.
+            {% elif videoconsulta.estadoConexion == 'Finalizada' %}
+                ⏹️ Videoconsulta finalizada — la sala y el flujo de video fueron cerrados.
+            {% elif es_clinico %}
+                ⏳ Sala de Espera Virtual activa: la videollamada P2P se abrirá cuando admitas al paciente.
+            {% else %}
+                ⏳ Sala de Espera Virtual: tu audio, video y conexión P2P permanecen privados hasta que el especialista te admita.
+            {% endif %}
+        </div>
+
         <div class="video-stage">
             <span id="call-status-pill" class="call-status-pill">Estado: {{ videoconsulta.estadoConexion }}</span>
             <div id="video-placeholder" class="video-placeholder">
                 <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">📡</div>
-                <strong id="placeholder-title">Conectando con la sala de videoconsulta...</strong>
-                <p id="placeholder-subtitle" style="margin-top: 0.4rem; max-width: 420px; font-size: 0.9rem;">
-                    {% if es_clinico %}
-                        Esperando conexión de video del paciente {{ paciente.nombres }} {{ paciente.apellidos }}. Puedes escribir notas clínicas en el panel derecho sin interrumpir la sesión.
+                <strong id="placeholder-title">
+                    {% if videoconsulta.estadoConexion == 'Finalizada' %}
+                        Videoconsulta finalizada
+                    {% elif videoconsulta.estadoConexion == 'En curso' %}
+                        Conectando con la sala de videoconsulta...
                     {% else %}
-                        Estás en la sala de espera virtual. El especialista iniciará la consulta en unos momentos.
+                        Sala de Espera Virtual activa
+                    {% endif %}
+                </strong>
+                <p id="placeholder-subtitle" style="margin-top: 0.4rem; max-width: 420px; font-size: 0.9rem;">
+                    {% if videoconsulta.estadoConexion == 'Finalizada' %}
+                        La sesión clínica de telemedicina ha finalizado.
+                    {% elif es_clinico %}
+                        Esperando al paciente {{ paciente.nombres }} {{ paciente.apellidos }}. Presiona «Admitir Paciente e Iniciar» para abrir el video P2P sin interrumpir tus notas clínicas.
+                    {% else %}
+                        Estás en la sala de espera virtual. Tu audio y video permanecerán retenidos hasta que el especialista te admita a la consulta.
                     {% endif %}
                 </p>
             </div>
@@ -62,7 +84,7 @@
                     <form method="POST" action="{% url 'telemedicina_estado' videoconsulta.id %}">
                         {% csrf_token %}
                         <input type="hidden" name="estadoConexion" value="En curso">
-                        <button type="submit" class="btn btn-sm btn-success">✅ Admitir / Sesión En Curso</button>
+                        <button type="submit" class="btn btn-sm btn-success">✅ Admitir Paciente e Iniciar</button>
                     </form>
                     <form method="POST" action="{% url 'telemedicina_estado' videoconsulta.id %}">
                         {% csrf_token %}
@@ -245,9 +267,11 @@ document.addEventListener('DOMContentLoaded', function() {
     const remoteVideo = document.getElementById('remote-video');
     const placeholder = document.getElementById('video-placeholder');
     const placeholderTitle = document.getElementById('placeholder-title');
+    const placeholderSubtitle = document.getElementById('placeholder-subtitle');
     const callStatusPill = document.getElementById('call-status-pill');
     const salaEstadoBadge = document.getElementById('sala-estado-badge');
     const peerPresenceText = document.getElementById('peer-presence-text');
+    const waitingBanner = document.getElementById('waiting-room-banner');
 
     const btnMic = document.getElementById('btn-mic');
     const btnCam = document.getElementById('btn-cam');
@@ -256,12 +280,15 @@ document.addEventListener('DOMContentLoaded', function() {
     const btnResetSignal = document.getElementById('btn-reset-signal');
 
     let localStream = null;
+    let screenStreamActual = null;
     let pc = null;
+    let pollTimer = null;
     let micMuted = false;
     let camOff = false;
     let offerSent = false;
     let answerSent = false;
     let lastOfferSdp = null;
+    let currentSalaEstado = "{{ videoconsulta.estadoConexion }}";
     const seenIce = new Set();
     const pendingIce = [];
 
@@ -272,9 +299,104 @@ document.addEventListener('DOMContentLoaded', function() {
         ]
     };
 
+    function slugEstado(estado) {
+        return (estado || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '-');
+    }
+
+    function syncTrackPreferences() {
+        if (!localStream) return;
+        const holdForWaitingRoom = (rolSala === 'guest' && currentSalaEstado !== 'En curso');
+        localStream.getAudioTracks().forEach(t => {
+            t.enabled = !holdForWaitingRoom && !micMuted;
+        });
+        localStream.getVideoTracks().forEach(t => {
+            t.enabled = !holdForWaitingRoom && !camOff;
+        });
+    }
+
+    function shutdownCall() {
+        if (pollTimer) {
+            clearInterval(pollTimer);
+            pollTimer = null;
+        }
+        if (screenStreamActual) {
+            screenStreamActual.getTracks().forEach(t => t.stop());
+            screenStreamActual = null;
+        }
+        if (localStream) {
+            localStream.getTracks().forEach(t => t.stop());
+            localStream = null;
+        }
+        if (pc) {
+            pc.close();
+            pc = null;
+        }
+        if (localVideo) {
+            localVideo.srcObject = null;
+            localVideo.style.display = 'none';
+        }
+        if (remoteVideo) {
+            remoteVideo.srcObject = null;
+        }
+        if (placeholder) {
+            placeholder.style.display = 'flex';
+        }
+        if (placeholderTitle) {
+            placeholderTitle.textContent = 'Videoconsulta finalizada';
+        }
+        if (placeholderSubtitle) {
+            placeholderSubtitle.textContent = 'La sesión ha terminado y los dispositivos de cámara y micrófono fueron desconectados de forma segura.';
+        }
+        [btnMic, btnCam, btnScreen, btnReconnect, btnResetSignal].forEach(btn => {
+            if (btn) btn.disabled = true;
+        });
+    }
+
+    function updateWaitingRoomUI(peerOnline) {
+        if (salaEstadoBadge) {
+            salaEstadoBadge.textContent = currentSalaEstado;
+            salaEstadoBadge.className = `status-badge status-${slugEstado(currentSalaEstado)}`;
+        }
+        if (!waitingBanner) return;
+
+        if (currentSalaEstado === 'Finalizada') {
+            waitingBanner.className = 'waiting-banner waiting-banner-ended';
+            waitingBanner.textContent = '⏹️ Videoconsulta finalizada — la sala y el flujo de video fueron cerrados.';
+            shutdownCall();
+            return;
+        }
+
+        if (currentSalaEstado === 'En curso') {
+            waitingBanner.className = 'waiting-banner waiting-banner-live';
+            waitingBanner.textContent = '🟢 Consulta en curso — canal WebRTC P2P cifrado habilitado.';
+            if (placeholderTitle && (!pc || pc.connectionState !== 'connected')) {
+                placeholderTitle.textContent = 'Estableciendo conexión de video P2P...';
+            }
+            if (placeholderSubtitle && (!pc || pc.connectionState !== 'connected')) {
+                placeholderSubtitle.textContent = peerOnline
+                    ? 'Negociando flujo multimedia cifrado con el otro participante...'
+                    : 'Sala abierta. Esperando que el otro participante establezca conexión...';
+            }
+            return;
+        }
+
+        waitingBanner.className = 'waiting-banner waiting-banner-alert';
+        if (rolSala === 'host') {
+            waitingBanner.textContent = peerOnline
+                ? '⏳ Paciente conectado en la Sala de Espera Virtual. Haz clic en "✅ Admitir Paciente e Iniciar" cuando estés listo.'
+                : '🕒 Sala en espera. Cuando el paciente ingrese, aparecerá aquí para que puedas admitirlo.';
+        } else {
+            waitingBanner.textContent = '⏳ Estás en la Sala de Espera Virtual. Tu audio, video y conexión P2P permanecen privados hasta que el especialista te admita.';
+            if (placeholderTitle) placeholderTitle.textContent = 'Sala de Espera Virtual activa';
+            if (placeholderSubtitle) {
+                placeholderSubtitle.textContent = 'Tu cámara y micrófono permanecerán pausados hasta que el especialista presione «Admitir Paciente e Iniciar».';
+            }
+        }
+    }
+
     async function sendSignal(payload) {
         try {
-            await fetch(senalUrl, {
+            const resp = await fetch(senalUrl, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -283,8 +405,10 @@ document.addEventListener('DOMContentLoaded', function() {
                 },
                 body: JSON.stringify(payload)
             });
+            return resp.ok;
         } catch (err) {
             console.error('Error enviando señalización WebRTC:', err);
+            return false;
         }
     }
 
@@ -316,7 +440,7 @@ document.addEventListener('DOMContentLoaded', function() {
         };
 
         pc.onicecandidate = function(event) {
-            if (event.candidate) {
+            if (event.candidate && currentSalaEstado === 'En curso') {
                 sendSignal({ type: 'ice', candidate: event.candidate });
             }
         };
@@ -333,9 +457,13 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     async function initMedia() {
+        if (currentSalaEstado === 'Finalizada') {
+            updateWaitingRoomUI(false);
+            return;
+        }
         if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
             placeholderTitle.textContent = 'Navegador sin acceso directo a cámara/micrófono (modo escucha/notas activo)';
-            createPeerConnection();
+            if (currentSalaEstado === 'En curso') createPeerConnection();
             return;
         }
         try {
@@ -350,7 +478,10 @@ document.addEventListener('DOMContentLoaded', function() {
                 placeholderTitle.textContent = 'Cámara/micrófono no detectados o sin permisos (puedes operar en modo escucha y notas clínicas)';
             }
         }
-        createPeerConnection();
+        syncTrackPreferences();
+        if (currentSalaEstado === 'En curso') {
+            createPeerConnection();
+        }
     }
 
     async function flushPendingIce() {
@@ -368,19 +499,30 @@ document.addEventListener('DOMContentLoaded', function() {
             if (!resp.ok) return;
             const data = await resp.json();
 
-            if (salaEstadoBadge && data.estadoConexion) {
-                salaEstadoBadge.textContent = data.estadoConexion;
-            }
+            currentSalaEstado = data.estadoConexion || currentSalaEstado;
+            updateWaitingRoomUI(Boolean(data.peer_online));
+            syncTrackPreferences();
+
             if (peerPresenceText) {
                 peerPresenceText.textContent = data.peer_online
                     ? '🟢 Participante remoto en línea'
                     : '🟡 Esperando al otro participante...';
             }
             if (callStatusPill && (!pc || pc.connectionState !== 'connected')) {
-                callStatusPill.textContent = `Estado: ${data.estadoConexion}`;
+                callStatusPill.textContent = `Estado: ${currentSalaEstado}`;
             }
 
-            if (!pc) return;
+            if (currentSalaEstado !== 'En curso') {
+                if (pc) {
+                    pc.close();
+                    pc = null;
+                }
+                return;
+            }
+
+            if (!pc) {
+                createPeerConnection();
+            }
 
             if (rolSala === 'host' && data.peer_online && !offerSent && pc.signalingState === 'stable') {
                 offerSent = true;
@@ -428,7 +570,7 @@ document.addEventListener('DOMContentLoaded', function() {
         btnMic.addEventListener('click', function() {
             if (!localStream) return;
             micMuted = !micMuted;
-            localStream.getAudioTracks().forEach(t => { t.enabled = !micMuted; });
+            syncTrackPreferences();
             btnMic.classList.toggle('is-muted', micMuted);
             btnMic.textContent = micMuted ? '🔇 Activar Mic' : '🎤 Silenciar Mic';
         });
@@ -438,7 +580,7 @@ document.addEventListener('DOMContentLoaded', function() {
         btnCam.addEventListener('click', function() {
             if (!localStream) return;
             camOff = !camOff;
-            localStream.getVideoTracks().forEach(t => { t.enabled = !camOff; });
+            syncTrackPreferences();
             btnCam.classList.toggle('is-muted', camOff);
             btnCam.textContent = camOff ? '📷 Encender Cámara' : '📷 Apagar Cámara';
         });
@@ -446,9 +588,10 @@ document.addEventListener('DOMContentLoaded', function() {
 
     if (btnScreen) {
         btnScreen.addEventListener('click', async function() {
-            if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia || !pc) return;
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia || !pc || currentSalaEstado !== 'En curso') return;
             try {
                 const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+                screenStreamActual = screenStream;
                 const screenTrack = screenStream.getVideoTracks()[0];
                 const sender = pc.getSenders().find(s => s.track && s.track.kind === 'video');
                 if (sender) {
@@ -457,9 +600,10 @@ document.addEventListener('DOMContentLoaded', function() {
                     btnScreen.classList.add('is-active');
                     screenTrack.onended = function() {
                         btnScreen.classList.remove('is-active');
+                        screenStreamActual = null;
                         if (localStream) {
                             const camTrack = localStream.getVideoTracks()[0];
-                            if (camTrack) sender.replaceTrack(camTrack);
+                            if (camTrack && pc) sender.replaceTrack(camTrack);
                             localVideo.srcObject = localStream;
                         }
                     };
@@ -470,6 +614,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     if (btnReconnect) {
         btnReconnect.addEventListener('click', function() {
+            if (currentSalaEstado !== 'En curso') return;
             createPeerConnection();
             pollSignal();
         });
@@ -477,6 +622,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     if (btnResetSignal) {
         btnResetSignal.addEventListener('click', async function() {
+            if (currentSalaEstado !== 'En curso') return;
             await sendSignal({ type: 'reset' });
             createPeerConnection();
             pollSignal();
@@ -484,8 +630,10 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     initMedia().then(() => {
-        pollSignal();
-        setInterval(pollSignal, 2000);
+        if (currentSalaEstado !== 'Finalizada') {
+            pollSignal();
+            pollTimer = setInterval(pollSignal, 2000);
+        }
     });
 
     // Guardado AJAX en vivo de Notas Clínicas sin interrumpir el video WebRTC

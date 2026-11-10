@@ -1246,6 +1246,142 @@ footer {
     .receipt-card h3 {
         color: #0f172a !important;
     }
+
+    .doc-kpi-box,
+    .doc-certificate-body,
+    .doc-section {
+        background: #f8fafc !important;
+        color: #0f172a !important;
+        border-color: #cbd5e1 !important;
+    }
+
+    .receipt-card .table-wrapper,
+    .receipt-card .data-table th,
+    .receipt-card .data-table td {
+        background: #ffffff !important;
+        color: #0f172a !important;
+        border-color: #cbd5e1 !important;
+    }
+
+    .receipt-card .data-table th {
+        background: #f1f5f9 !important;
+    }
+
+    .clinical-block-title,
+    .doc-kpi-val {
+        color: #0284c7 !important;
+    }
+}
+
+/* ==========================================================================
+   Sala de Espera Virtual, Documentos Clínicos Imprimibles y Notificaciones
+   ========================================================================== */
+
+.waiting-banner {
+    padding: 0.85rem 1rem;
+    border-radius: 10px;
+    font-size: 0.9rem;
+    font-weight: 500;
+    margin-bottom: 1rem;
+    border: 1px solid var(--border-color);
+    background: var(--bg-color);
+    color: var(--text-color);
+}
+
+.waiting-banner-alert {
+    background: rgba(245, 158, 11, 0.12);
+    border-color: rgba(245, 158, 11, 0.45);
+    color: #fbbf24;
+}
+
+.waiting-banner-live {
+    background: rgba(34, 197, 94, 0.12);
+    border-color: rgba(34, 197, 94, 0.45);
+    color: #4ade80;
+}
+
+.waiting-banner-ended {
+    background: rgba(239, 68, 68, 0.12);
+    border-color: rgba(239, 68, 68, 0.45);
+    color: #f87171;
+}
+
+.doc-sheet-wide {
+    max-width: 980px;
+}
+
+.doc-tabs {
+    display: inline-flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.doc-certificate-body {
+    background: var(--bg-color);
+    border: 1px solid var(--border-color);
+    border-left: 4px solid var(--primary-color);
+    border-radius: 10px;
+    padding: 1.5rem;
+    margin: 1rem 0 1.5rem;
+    line-height: 1.8;
+}
+
+.doc-section {
+    background: var(--bg-color);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    padding: 1.25rem 1.5rem;
+    margin: 1rem 0 1.5rem;
+}
+
+.doc-kpi-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 1rem;
+    margin: 1rem 0 1.5rem;
+}
+
+.doc-kpi-box {
+    background: var(--bg-color);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    padding: 1rem 1.25rem;
+}
+
+.doc-kpi-val {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--primary-color);
+    margin-top: 0.25rem;
+}
+
+.doc-signature-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 2.5rem;
+    margin-top: 2.5rem;
+    padding-top: 1.25rem;
+    border-top: 1px solid var(--border-color);
+    text-align: center;
+}
+
+.doc-signature-line {
+    width: 75%;
+    margin: 1.75rem auto 0.6rem;
+    border-top: 1px solid var(--text-secondary);
+}
+
+.notif-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.15rem 0.5rem;
+    border-radius: 9999px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    background: rgba(14, 165, 233, 0.12);
+    color: var(--primary-color);
+    border: 1px solid rgba(14, 165, 233, 0.3);
 }
 
 

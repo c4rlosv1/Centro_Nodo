@@ -27,6 +27,9 @@ from clinica.views import (
     ficha_detalle_view,
     ficha_editar_antecedentes_view,
     atencion_crear_view,
+    atencion_documento_view,
+    cita_enviar_recordatorio_view,
+    caja_reporte_liquidacion_view,
 )
 from clinica.forms import CustomPasswordResetForm, CustomSetPasswordForm
 
@@ -69,11 +72,13 @@ urlpatterns = [
     path('fichas/<int:ficha_id>/', ficha_detalle_view, name='ficha_detalle'),
     path('fichas/<int:ficha_id>/editar-antecedentes/', ficha_editar_antecedentes_view, name='ficha_editar_antecedentes'),
     path('fichas/<int:ficha_id>/nueva-atencion/', atencion_crear_view, name='atencion_crear'),
+    path('fichas/atencion/<int:atencion_id>/documento/', atencion_documento_view, name='atencion_documento'),
 
     # Módulo de Agendamiento Real
     path('agendamiento/', agendamiento_view, name='agendamiento'),
     path('agendamiento/disponibilidad/', disponibilidad_json_view, name='agendamiento_disponibilidad'),
     path('agendamiento/cita/<int:cita_id>/estado/', cita_cambiar_estado_view, name='cita_cambiar_estado'),
+    path('agendamiento/cita/<int:cita_id>/recordar/', cita_enviar_recordatorio_view, name='cita_enviar_recordatorio'),
     path('agendamiento/bloqueos/nuevo/', bloqueo_crear_view, name='bloqueo_crear'),
     path('agendamiento/bloqueos/<int:bloqueo_id>/eliminar/', bloqueo_eliminar_view, name='bloqueo_eliminar'),
 
@@ -88,4 +93,5 @@ urlpatterns = [
     path('caja/pago/<int:pago_id>/estado/', pago_cambiar_estado_view, name='pago_cambiar_estado'),
     path('caja/comprobante/<int:pago_id>/', pago_comprobante_view, name='pago_comprobante'),
     path('caja/exportar/', caja_exportar_csv_view, name='caja_exportar_csv'),
+    path('caja/reporte-liquidacion/', caja_reporte_liquidacion_view, name='caja_reporte_liquidacion'),
 ]

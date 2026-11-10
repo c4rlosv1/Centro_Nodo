@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ asunto }}</title>
+</head>
+<body style="font-family: 'Segoe UI', Arial, sans-serif; background-color: #f8fafc; color: #1e293b; padding: 24px; margin: 0;">
+    <div style="max-width: 600px; margin: 0 auto; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden;">
+        <div style="background: linear-gradient(135deg, #0ea5e9, #1e3a8a); color: #ffffff; padding: 24px;">
+            <h1 style="margin: 0; font-size: 22px;">Centro Nodo</h1>
+            <p style="margin: 6px 0 0; font-size: 14px; color: #e0f2fe;">Salud Mental Integral &bull; {{ tipo }}</p>
+        </div>
+        <div style="padding: 24px; line-height: 1.6;">
+            <p style="margin-top: 0;">Hola <strong>{{ nombre_destinatario }}</strong>,</p>
+            {% if es_para_profesional %}
+                <p>Te informamos la siguiente actualización en tu agenda clínica:</p>
+            {% else %}
+                <p>Te enviamos el detalle actualizado de tu atención en <strong>Centro Nodo</strong>:</p>
+            {% endif %}
+
+            <table style="width: 100%; border-collapse: collapse; margin: 16px 0; background: #f8fafc; border-radius: 8px; border: 1px solid #e2e8f0;">
+                <tr>
+                    <td style="padding: 10px 14px; font-weight: 600; color: #64748b; border-bottom: 1px solid #e2e8f0;">Cita</td>
+                    <td style="padding: 10px 14px; border-bottom: 1px solid #e2e8f0;">#{{ cita.id }} ({{ cita.estado }})</td>
+                </tr>
+                <tr>
+                    <td style="padding: 10px 14px; font-weight: 600; color: #64748b; border-bottom: 1px solid #e2e8f0;">Fecha y Horario</td>
+                    <td style="padding: 10px 14px; border-bottom: 1px solid #e2e8f0;"><strong>{{ fecha_str }}</strong> &bull; {{ hora_inicio_str }} - {{ hora_fin_str }} hrs</td>
+                </tr>
+                <tr>
+                    <td style="padding: 10px 14px; font-weight: 600; color: #64748b; border-bottom: 1px solid #e2e8f0;">Paciente</td>
+                    <td style="padding: 10px 14px; border-bottom: 1px solid #e2e8f0;">{{ paciente.nombres }} {{ paciente.apellidos }} ({{ paciente.rut }})</td>
+                </tr>
+                <tr>
+                    <td style="padding: 10px 14px; font-weight: 600; color: #64748b; border-bottom: 1px solid #e2e8f0;">Especialista</td>
+                    <td style="padding: 10px 14px; border-bottom: 1px solid #e2e8f0;">{{ profesional.nombres }} {{ profesional.apellidos }} ({{ profesional.especialidad }})</td>
+                </tr>
+                <tr>
+                    <td style="padding: 10px 14px; font-weight: 600; color: #64748b;">Modalidad</td>
+                    <td style="padding: 10px 14px;">
+                        {% if videoconsulta %}
+                            📹 Telemedicina Online (Sala <code>{{ videoconsulta.urlSalaWebRTC }}</code>)
+                        {% else %}
+                            🏥 Presencial ({{ clinic_address }})
+                        {% endif %}
+                    </td>
+                </tr>
+            </table>
+
+            {% if not es_para_profesional and cita.estado != 'Cancelada' %}
+                {% if videoconsulta %}
+                    <p style="font-size: 14px; color: #334155;">
+                        Ingresa con tu cuenta al portal web unos minutos antes de la hora acordada para acceder a la sala de espera virtual.
+                    </p>
+                {% else %}
+                    <p style="font-size: 14px; color: #334155;">
+                        Por favor preséntate 10 minutos antes de tu hora en <strong>{{ clinic_address }}</strong>.
+                    </p>
+                {% endif %}
+            {% endif %}
+        </div>
+        <div style="background: #f1f5f9; padding: 14px 24px; font-size: 12px; color: #64748b; text-align: center;">
+            Centro Nodo &bull; Manuel Antonio Matta 549, Osorno, Chile &bull; contacto@centronodo.cl
+        </div>
+    </div>
+</body>
+</html>
+

@@ -1,0 +1,29 @@
+Hola {{ nombre_destinatario }},
+
+{% if es_para_profesional %}
+Te informamos una actualización en tu agenda clínica en Centro Nodo:
+{% else %}
+Te informamos sobre tu consulta en Centro Nodo (Osorno, Chile):
+{% endif %}
+
+- Estado / Motivo: {{ tipo }}
+- Cita N°: #{{ cita.id }}
+- Fecha: {{ fecha_str }}
+- Horario: {{ hora_inicio_str }} a {{ hora_fin_str }} hrs
+- Paciente: {{ paciente.nombres }} {{ paciente.apellidos }} ({{ paciente.rut }})
+- Especialista: {{ profesional.nombres }} {{ profesional.apellidos }} ({{ profesional.especialidad }})
+- Modalidad: {% if videoconsulta %}Telemedicina Online (Sala WebRTC: {{ videoconsulta.urlSalaWebRTC }}){% else %}Presencial ({{ clinic_address }}){% endif %}
+- Estado actual de la cita: {{ cita.estado }}
+
+{% if not es_para_profesional and cita.estado != 'Cancelada' %}
+{% if videoconsulta %}
+Para ingresar a tu videoconsulta, inicia sesión en el portal web minutos antes de la hora programada y entra al módulo Telemedicina (Sala {{ videoconsulta.urlSalaWebRTC }}).
+{% else %}
+Te recomendamos llegar 10 minutos antes a nuestra sede en {{ clinic_address }}.
+{% endif %}
+{% endif %}
+
+Saludos cordiales,
+Equipo Centro Nodo
+contacto@centronodo.cl | +56 64 2 123 456
+

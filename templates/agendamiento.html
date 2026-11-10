@@ -201,6 +201,15 @@
                                 </td>
                                 <td>
                                     <span class="status-badge status-{{ c.estado|lower|slugify }}">{{ c.estado }}</span>
+                                    {% with notifs=c.notificaciones.all %}
+                                        {% if notifs %}
+                                            <div style="margin-top: 0.35rem;">
+                                                <span class="notif-pill" title="{% for n in notifs %}{{ n.tipo }} ({{ n.enviadoEn|date:'d/m H:i' }}){% if not forloop.last %}, {% endif %}{% endfor %}">
+                                                    ✉️ {{ notifs|length }} correo{{ notifs|length|pluralize }}
+                                                </span>
+                                            </div>
+                                        {% endif %}
+                                    {% endwith %}
                                 </td>
                                 <td>
                                     <div class="actions-inline">
@@ -212,6 +221,11 @@
                                                     <button type="submit" class="btn btn-sm btn-success" title="Confirmar cita">Confirmar</button>
                                                 </form>
                                             {% endif %}
+
+                                            <form method="POST" action="{% url 'cita_enviar_recordatorio' c.id %}">
+                                                {% csrf_token %}
+                                                <button type="submit" class="btn btn-sm btn-secondary" title="Enviar recordatorio por correo al paciente">✉️ Recordar</button>
+                                            </form>
 
                                             {% if user.es_administrador or user.es_profesional %}
                                                 {% if not c.atencion_clinica and c.paciente.ficha_clinica %}
