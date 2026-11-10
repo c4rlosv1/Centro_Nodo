@@ -2,8 +2,8 @@ document.addEventListener('DOMContentLoaded', function() {
     const themeToggle = document.getElementById('theme-toggle');
     const html = document.documentElement;
     
-    // Cargar tema guardado
-    const savedTheme = localStorage.getItem('theme') || 'light';
+    // Sincronizar con el tema oscuro por defecto definido en base.html
+    const savedTheme = localStorage.getItem('theme') || 'dark';
     html.setAttribute('data-theme', savedTheme);
     updateButtonText(savedTheme);
     

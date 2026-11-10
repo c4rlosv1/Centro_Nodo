@@ -171,6 +171,18 @@
   - Endurecimiento de `/telemedicina/sala/<id>/senal/` (máximo 64 KB por payload, validación de diccionario JSON y tipo de mensaje, SDP <= 32 KB, ICE <= 2 KB y máximo 50 candidatos por par, `reset` exclusivo de `host` en curso) y eliminación de `.innerHTML` en JavaScript de `telemedicina_sala.html`.
   - Corrección de precedencia en botón de atención en `templates/pacientes/detalle.html`.
 
+### 16. Rediseño Visual Premium ("Clinical Glassmorphism", Fondo Animado y Agenda Refinada)
+- **Fondo Ambiental Global y Sistema Dual (`static/css/style.css`, `static/js/theme.js`, `templates/base.html`):**
+  - Integrado fondo ambiental fijo (`.site-ambient-bg` con `hero-neuro-salud.jpg` y animación `@keyframes ambientBreathe`) detrás de paneles traslúcidos en todas las vistas, optimizado tanto para **Obsidian Twilight Sapphire** (`data-theme="dark"`) como para **Porcelain Clinical** (`data-theme="light"`), y oculto automáticamente en `@media print`.
+  - Tipografía editorial `Plus Jakarta Sans`, cabecera sticky frosted, navegación en píldoras (`is-active`), cache-busting `?v=20261110-2` en CSS/JS/imágenes y reglas `@media (prefers-reduced-motion: reduce)`.
+- **Hero Clínico Animado y Bento Widgets (`templates/dashboard.html`, `static/css/dashboard.css`):**
+  - Posicionamiento absoluto del arte cristalino con flotación continua (`heroSculptureFloat`), orbes aurora (`.hero-aurora-orb`), barrido de brillo vítreo (`.hero-sheen-sweep`), entrada escalonada (`heroEnterUp`), acento degradado animado (`heroAccentShimmer`) y widgets bento levitantes con barras rítmicas y onda ECG/neural animada (`.wave-live-pulse`, `.hero-node-ring`).
+  - Corrección de etiquetas `{{ ... }}` divididas en múltiples líneas en `templates/dashboard.html` para garantizar compatibilidad estricta con el parser de plantillas de Django.
+- **Mejora Estructural de Agenda de Citas (`templates/agendamiento.html`, `static/css/style.css`):**
+  - Ajuste de `.split-layout` (`355px minmax(0, 1fr)`), barra de filtros encuadrada, contador de registros (`.agenda-count-badge`), columna consolidada de estado/modalidad (`.badge-stack`) y chips `.time-pill` / `.rut-nowrap` / `.notif-pill` sin cortes de línea indeseados, junto con botonera compacta en grilla horizontal (`.agenda-actions-cluster` + `.btn-agenda`).
+- **Activos Visuales y Contraste (`static/img/`, `templates/login.html`, `templates/caja/index.html`, `templates/telemedicina_sala.html`):**
+  - Login showcase dividido (`.auth-showcase-grid`) con onda biométrica animada, variables de contraste adaptativas (`--badge-success-text`, `--badge-danger-text`) y preservación de reglas de impresión.
+
 
 ---
 

@@ -3,53 +3,78 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Centro Nodo - Sistema Clínico y Telemedicina</title>
+    <title>Centro Nodo — Salud Mental Integral y Telemedicina</title>
     {% load static %}
-    <link rel="stylesheet" href="{% static 'css/style.css' %}">
-    <link rel="stylesheet" href="{% static 'css/dashboard.css' %}">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{% static 'css/style.css' %}?v=20261110-2">
+    <link rel="stylesheet" href="{% static 'css/dashboard.css' %}?v=20261110-2">
     <script>
         (function() {
             const theme = localStorage.getItem('theme') || 'dark';
             document.documentElement.setAttribute('data-theme', theme);
         })();
     </script>
-    <script src="{% static 'js/theme.js' %}" defer></script>
+    <script src="{% static 'js/theme.js' %}?v=20261110-2" defer></script>
 </head>
 <body>
-    <header>
+    <div class="site-ambient-bg" aria-hidden="true">
+        <img src="{% static 'img/hero-neuro-salud.jpg' %}?v=20261110-2" alt="" class="site-ambient-img">
+        <div class="site-ambient-scrim"></div>
+    </div>
+    <header class="site-header">
         <div class="container header-container">
             <a href="{% url 'dashboard' %}" class="logo-link">
-                <h1 class="logo">Centro Nodo</h1>
+                <span class="brand-mark" aria-hidden="true">
+                    <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <defs>
+                            <linearGradient id="nodoLogoGrad" x1="4" y1="4" x2="28" y2="28" gradientUnits="userSpaceOnUse">
+                                <stop stop-color="#38BDF8"/>
+                                <stop offset="0.6" stop-color="#3B82F6"/>
+                                <stop offset="1" stop-color="#FB7185"/>
+                            </linearGradient>
+                        </defs>
+                        <path d="M16 27C16 27 6 20.5 6 12.6C6 9.3 8.5 6.8 11.7 6.8C13.7 6.8 15.2 7.9 16 9.3C16.8 7.9 18.3 6.8 20.3 6.8C23.5 6.8 26 9.3 26 12.6C26 20.5 16 27 16 27Z" stroke="url(#nodoLogoGrad)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        <path d="M9.5 15.5H12.8L14.6 12L17.4 18.5L19.4 15.5H22.5" stroke="#38BDF8" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                </span>
+                <span class="brand-copy">
+                    <h1 class="logo">Centro Nodo</h1>
+                    <span class="brand-sub">Salud Integral</span>
+                </span>
             </a>
             <nav>
                 <ul class="nav-list">
-                    <li><a href="{% url 'dashboard' %}">Dashboard</a></li>
+                    {% with url_name=request.resolver_match.url_name %}
+                    <li><a href="{% url 'dashboard' %}" class="{% if url_name == 'dashboard' %}is-active{% endif %}">Dashboard</a></li>
                     {% if user.is_authenticated %}
-                        <li><a href="{% url 'agendamiento' %}">Agendamiento</a></li>
+                        <li><a href="{% url 'agendamiento' %}" class="{% if url_name == 'agendamiento' %}is-active{% endif %}">Agendamiento</a></li>
                         {% if user.es_staff_clinico %}
-                            <li><a href="{% url 'pacientes_lista' %}">Pacientes</a></li>
+                            <li><a href="{% url 'pacientes_lista' %}" class="{% if 'paciente' in url_name %}is-active{% endif %}">Pacientes</a></li>
                         {% endif %}
                         {% if user.es_administrador or user.es_profesional %}
-                            <li><a href="{% url 'fichas_lista' %}">Fichas Clínicas</a></li>
+                            <li><a href="{% url 'fichas_lista' %}" class="{% if 'ficha' in url_name or 'atencion' in url_name %}is-active{% endif %}">Fichas Clínicas</a></li>
                         {% elif user.es_paciente %}
-                            <li><a href="{% url 'fichas_lista' %}">Mi Ficha</a></li>
+                            <li><a href="{% url 'fichas_lista' %}" class="{% if 'ficha' in url_name or 'atencion' in url_name %}is-active{% endif %}">Mi Ficha</a></li>
                         {% endif %}
                         {% if user.es_administrador or user.es_profesional or user.es_paciente %}
-                            <li><a href="{% url 'telemedicina' %}">Telemedicina</a></li>
+                            <li><a href="{% url 'telemedicina' %}" class="{% if 'telemedicina' in url_name %}is-active{% endif %}">Telemedicina</a></li>
                         {% endif %}
                         {% if user.es_administrador or user.es_recepcionista %}
-                            <li><a href="{% url 'caja' %}">Caja y Pagos</a></li>
+                            <li><a href="{% url 'caja' %}" class="{% if 'caja' in url_name or 'pago' in url_name %}is-active{% endif %}">Caja y Pagos</a></li>
                         {% elif user.es_profesional %}
-                            <li><a href="{% url 'caja' %}">Honorarios</a></li>
+                            <li><a href="{% url 'caja' %}" class="{% if 'caja' in url_name or 'pago' in url_name %}is-active{% endif %}">Honorarios</a></li>
                         {% elif user.es_paciente %}
-                            <li><a href="{% url 'caja' %}">Mis Pagos</a></li>
+                            <li><a href="{% url 'caja' %}" class="{% if 'caja' in url_name or 'pago' in url_name %}is-active{% endif %}">Mis Pagos</a></li>
                         {% endif %}
                     {% endif %}
-                    
+                    {% endwith %}
+
                     {% if user.is_authenticated %}
                         <li class="user-badge-item">
                             <div class="user-badge" title="Conectado como {{ user.username }}">
-                                <span class="user-avatar">👤</span>
+                                <span class="user-avatar-dot"></span>
                                 <span class="user-name">{{ user.first_name|default:user.username }}</span>
                                 {% if user.rol %}
                                     <span class="role-tag">{{ user.rol.nombre }}</span>
@@ -68,7 +93,7 @@
                         </li>
                     {% endif %}
 
-                    <li><button id="theme-toggle" class="theme-toggle" title="Cambiar tema">🌙</button></li>
+                    <li><button id="theme-toggle" class="theme-toggle" title="Cambiar tema claro / oscuro">☀️</button></li>
                 </ul>
             </nav>
         </div>
@@ -95,9 +120,10 @@
         {% endblock %}
     </main>
 
-    <footer>
-        <div class="container">
-            <p>&copy; 2026 Centro Nodo - Sistema de Gestión Clínica y Telemedicina (Osorno, Chile)</p>
+    <footer class="site-footer">
+        <div class="container footer-inner">
+            <p>&copy; 2026 <strong>Centro Nodo</strong> — Salud Mental Integral y Telemedicina P2P</p>
+            <span class="footer-meta">Manuel Antonio Matta 549, Osorno, Chile &bull; Expedientes Cifrados E2E</span>
         </div>
     </footer>
 </body>

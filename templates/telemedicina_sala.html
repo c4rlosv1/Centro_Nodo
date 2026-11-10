@@ -671,17 +671,17 @@ document.addEventListener('DOMContentLoaded', function() {
                 const data = await resp.json();
                 if (resp.ok && data.ok) {
                     const hora = new Date().toLocaleTimeString('es-CL');
-                    setAjaxStatus(`✅ ${data.mensaje} (${hora})`, '#4ade80');
+                    setAjaxStatus(`✅ ${data.mensaje} (${hora})`, 'var(--badge-success-text)');
                 } else {
                     let msg = data.error || 'Complete los campos obligatorios (Motivo de consulta y Diagnóstico).';
                     if (data.errors && typeof data.errors === 'object') {
                         const firstList = Object.values(data.errors).find(v => Array.isArray(v) && v.length > 0);
                         if (firstList) msg = firstList[0];
                     }
-                    setAjaxStatus(`⚠️ ${msg}`, '#f87171');
+                    setAjaxStatus(`⚠️ ${msg}`, 'var(--badge-danger-text)');
                 }
             } catch (err) {
-                setAjaxStatus('⚠️ Error de red al guardar la nota.', '#f87171');
+                setAjaxStatus('⚠️ Error de red al guardar la nota.', 'var(--badge-danger-text)');
             } finally {
                 btnSaveLive.disabled = false;
             }

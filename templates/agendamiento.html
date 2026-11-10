@@ -8,7 +8,7 @@
     </div>
     {% if user.es_staff_clinico %}
         <div class="page-actions">
-            <a href="{% url 'paciente_crear' %}" class="btn btn-secondary">+ Nuevo Paciente</a>
+            <a href="{% url 'paciente_crear' %}" class="btn btn-secondary btn-pill">+ Nuevo Paciente</a>
         </div>
     {% endif %}
 </div>
@@ -71,7 +71,7 @@
                     <label for="{{ cita_form.es_telemedicina.id_for_label }}">{{ cita_form.es_telemedicina.label }}</label>
                 </div>
 
-                <button type="submit" class="btn btn-primary btn-block">Confirmar Agendamiento</button>
+                <button type="submit" class="btn btn-primary btn-pill btn-block">Confirmar Agendamiento</button>
             </form>
         </div>
 
@@ -106,7 +106,7 @@
                         {{ bloqueo_form.motivo }}
                     </div>
 
-                    <button type="submit" class="btn btn-secondary btn-block">Registrar Bloqueo</button>
+                    <button type="submit" class="btn btn-secondary btn-pill btn-block">Registrar Bloqueo</button>
                 </form>
             </div>
         {% endif %}
@@ -115,7 +115,12 @@
     <!-- Columna Derecha: Listado y Filtros de Citas -->
     <div>
         <div class="panel-card">
-            <h3>🗓️ Agenda de Citas</h3>
+            <div class="agenda-panel-head">
+                <div>
+                    <h3 style="margin-bottom: 0;">🗓️ Agenda de Citas</h3>
+                </div>
+                <span class="agenda-count-badge">{{ citas|length }} cita{{ citas|length|pluralize }}</span>
+            </div>
 
             <form method="GET" action="{% url 'agendamiento' %}" class="filter-bar">
                 <div class="filter-field">
@@ -149,91 +154,83 @@
                     </select>
                 </div>
 
-                <div class="actions-inline">
-                    <button type="submit" class="btn btn-sm btn-primary">Filtrar</button>
-                    <a href="{% url 'agendamiento' %}?ver=todas" class="btn btn-sm btn-secondary">Ver Historial</a>
+                <div class="actions-inline filter-actions">
+                    <button type="submit" class="btn btn-sm btn-primary btn-pill">Filtrar</button>
+                    <a href="{% url 'agendamiento' %}?ver=todas" class="btn btn-sm btn-secondary btn-pill">Ver Historial</a>
                     {% if fecha_filtro or profesional_filtro or estado_filtro or ver_todas %}
-                        <a href="{% url 'agendamiento' %}" class="btn btn-sm btn-secondary">Limpiar</a>
+                        <a href="{% url 'agendamiento' %}" class="btn btn-sm btn-secondary btn-pill">Limpiar</a>
                     {% endif %}
                 </div>
             </form>
 
             {% if citas %}
                 <div class="table-wrapper">
-                    <table class="data-table">
+                    <table class="data-table agenda-table">
                         <thead>
                             <tr>
                                 <th>Fecha / Horario</th>
                                 <th>Paciente</th>
-                                <th>Profesional</th>
-                                <th>Modalidad</th>
-                                <th>Estado</th>
+                                <th>Especialista</th>
+                                <th>Estado y Modalidad</th>
                                 <th>Acciones</th>
                             </tr>
                         </thead>
                         <tbody>
                             {% for c in citas %}
                             <tr>
-                                <td>
-                                    <strong>{{ c.fechaHoraInicio|date:"d/m/Y" }}</strong><br>
-                                    <small class="timeline-meta">{{ c.fechaHoraInicio|date:"H:i" }} - {{ c.fechaHoraFin|date:"H:i" }}</small>
+                                <td class="col-horario">
+                                    <strong class="agenda-date">{{ c.fechaHoraInicio|date:"d/m/Y" }}</strong>
+                                    <span class="time-pill">{{ c.fechaHoraInicio|date:"H:i" }} – {{ c.fechaHoraFin|date:"H:i" }}</span>
                                 </td>
                                 <td>
                                     {% if user.es_staff_clinico %}
-                                        <a href="{% url 'paciente_detalle' c.paciente.id %}" style="color: var(--primary-color); text-decoration: none; font-weight: 500;">
+                                        <a href="{% url 'paciente_detalle' c.paciente.id %}" class="patient-link">
                                             {{ c.paciente.nombres }} {{ c.paciente.apellidos }}
                                         </a>
                                     {% else %}
-                                        {{ c.paciente.nombres }} {{ c.paciente.apellidos }}
+                                        <strong class="patient-name">{{ c.paciente.nombres }} {{ c.paciente.apellidos }}</strong>
                                     {% endif %}
-                                    <br><small class="timeline-meta">{{ c.paciente.rut }}</small>
+                                    <div class="timeline-meta rut-nowrap">{{ c.paciente.rut }}</div>
                                 </td>
                                 <td>
-                                    {{ c.profesional.nombres }} {{ c.profesional.apellidos }}<br>
-                                    <small class="timeline-meta">{{ c.profesional.especialidad }}</small>
+                                    <div class="prof-name">{{ c.profesional.nombres }} {{ c.profesional.apellidos }}</div>
+                                    <div class="timeline-meta">{{ c.profesional.especialidad }}</div>
                                 </td>
                                 <td>
-                                    {% if c.videoconsulta %}
-                                        <span class="status-badge status-confirmada">📹 Telemedicina</span>
-                                    {% else %}
-                                        <span class="status-badge status-pendiente">🏥 Presencial</span>
-                                    {% endif %}
-                                </td>
-                                <td>
-                                    <span class="status-badge status-{{ c.estado|lower|slugify }}">{{ c.estado }}</span>
-                                    {% with notifs=c.notificaciones.all %}
-                                        {% if notifs %}
-                                            <div style="margin-top: 0.35rem;">
+                                    <div class="badge-stack">
+                                        <span class="status-badge status-{{ c.estado|lower|slugify }}">{{ c.estado }}</span>
+                                        {% if c.videoconsulta %}
+                                            <span class="status-badge status-confirmada">📹 Telemedicina</span>
+                                        {% else %}
+                                            <span class="status-badge status-pendiente">🏥 Presencial</span>
+                                        {% endif %}
+                                        {% with notifs=c.notificaciones.all %}
+                                            {% if notifs %}
                                                 <span class="notif-pill" title="{% for n in notifs %}{{ n.tipo }} ({{ n.enviadoEn|date:'d/m H:i' }}){% if not forloop.last %}, {% endif %}{% endfor %}">
                                                     ✉️ {{ notifs|length }} correo{{ notifs|length|pluralize }}
                                                 </span>
-                                            </div>
-                                        {% endif %}
-                                    {% endwith %}
+                                            {% endif %}
+                                        {% endwith %}
+                                    </div>
                                 </td>
                                 <td>
-                                    <div class="actions-inline">
+                                    <div class="agenda-actions-cluster">
                                         {% if user.es_staff_clinico and c.estado != 'Cancelada' %}
                                             {% if c.estado == 'Agendada' %}
                                                 <form method="POST" action="{% url 'cita_cambiar_estado' c.id %}">
                                                     {% csrf_token %}
                                                     <input type="hidden" name="estado" value="Confirmada">
-                                                    <button type="submit" class="btn btn-sm btn-success" title="Confirmar cita">Confirmar</button>
+                                                    <button type="submit" class="btn-agenda btn-success" title="Confirmar cita">Confirmar</button>
                                                 </form>
                                             {% endif %}
 
-                                            <form method="POST" action="{% url 'cita_enviar_recordatorio' c.id %}">
-                                                {% csrf_token %}
-                                                <button type="submit" class="btn btn-sm btn-secondary" title="Enviar recordatorio por correo al paciente">✉️ Recordar</button>
-                                            </form>
-
                                             {% if user.es_administrador or user.es_profesional %}
                                                 {% if not c.atencion_clinica and c.paciente.ficha_clinica %}
-                                                    <a href="{% url 'ficha_detalle' c.paciente.ficha_clinica.id %}?cita_id={{ c.id }}" class="btn btn-sm btn-primary" title="Registrar evolución clínica">
+                                                    <a href="{% url 'ficha_detalle' c.paciente.ficha_clinica.id %}?cita_id={{ c.id }}" class="btn-agenda btn-primary" title="Registrar evolución clínica">
                                                         📋 Atender
                                                     </a>
                                                 {% elif c.atencion_clinica and c.paciente.ficha_clinica %}
-                                                    <a href="{% url 'ficha_detalle' c.paciente.ficha_clinica.id %}" class="btn btn-sm btn-secondary">
+                                                    <a href="{% url 'ficha_detalle' c.paciente.ficha_clinica.id %}" class="btn-agenda btn-secondary">
                                                         Ver Ficha
                                                     </a>
                                                 {% endif %}
@@ -242,7 +239,7 @@
 
                                         {% if c.estado != 'Cancelada' and c.videoconsulta %}
                                             {% if user.es_administrador or user.es_profesional or user.es_paciente %}
-                                                <a href="{% url 'telemedicina_sala' c.videoconsulta.id %}" class="btn btn-sm btn-secondary" title="Ingresar a sala dual de videoconsulta">
+                                                <a href="{% url 'telemedicina_sala' c.videoconsulta.id %}" class="btn-agenda btn-secondary" title="Ingresar a sala dual de videoconsulta">
                                                     📹 Sala
                                                 </a>
                                             {% endif %}
@@ -250,17 +247,24 @@
 
                                         {% if c.estado != 'Cancelada' %}
                                             {% if user.es_administrador or user.es_recepcionista %}
-                                                <a href="{% url 'caja' %}?cita_id={{ c.id }}" class="btn btn-sm btn-secondary" title="Registrar pago en caja">
+                                                <a href="{% url 'caja' %}?cita_id={{ c.id }}" class="btn-agenda btn-secondary" title="Registrar pago en caja">
                                                     💳 Caja
                                                 </a>
                                             {% endif %}
+                                        {% endif %}
+
+                                        {% if user.es_staff_clinico and c.estado != 'Cancelada' %}
+                                            <form method="POST" action="{% url 'cita_enviar_recordatorio' c.id %}">
+                                                {% csrf_token %}
+                                                <button type="submit" class="btn-agenda btn-secondary" title="Enviar recordatorio por correo al paciente">✉️ Recordar</button>
+                                            </form>
                                         {% endif %}
 
                                         {% if c.estado == 'Agendada' or c.estado == 'Confirmada' %}
                                             <form method="POST" action="{% url 'cita_cambiar_estado' c.id %}" onsubmit="return confirm('¿Deseas cancelar esta cita?');">
                                                 {% csrf_token %}
                                                 <input type="hidden" name="estado" value="Cancelada">
-                                                <button type="submit" class="btn btn-sm btn-danger">Cancelar</button>
+                                                <button type="submit" class="btn-agenda btn-danger">Cancelar</button>
                                             </form>
                                         {% endif %}
                                     </div>
@@ -294,14 +298,14 @@
                         <tbody>
                             {% for b in bloqueos %}
                             <tr>
-                                <td>{{ b.profesional.nombres }} {{ b.profesional.apellidos }}</td>
-                                <td>{{ b.fechaHoraInicio|date:"d/m/Y H:i" }}</td>
-                                <td>{{ b.fechaHoraFin|date:"d/m/Y H:i" }}</td>
+                                <td><strong>{{ b.profesional.nombres }} {{ b.profesional.apellidos }}</strong></td>
+                                <td><span class="time-pill">{{ b.fechaHoraInicio|date:"d/m/Y H:i" }}</span></td>
+                                <td><span class="time-pill">{{ b.fechaHoraFin|date:"d/m/Y H:i" }}</span></td>
                                 <td>{{ b.motivo|default:"Bloqueo de agenda" }}</td>
                                 <td>
                                     <form method="POST" action="{% url 'bloqueo_eliminar' b.id %}" onsubmit="return confirm('¿Eliminar este bloqueo horario?');">
                                         {% csrf_token %}
-                                        <button type="submit" class="btn btn-sm btn-danger">Quitar</button>
+                                        <button type="submit" class="btn-agenda btn-danger">Quitar</button>
                                     </form>
                                 </td>
                             </tr>

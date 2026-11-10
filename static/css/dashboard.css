@@ -1,143 +1,555 @@
-/* Dashboard Styles - Centro Nodo Branding */
-.dashboard-container {
-    padding: 0;
+/* ==========================================================================
+   Dashboard & Animated Clinical Hero — Centro Nodo Salud Integral
+   ========================================================================== */
+
+.welcome-section.welcome-hero-glass {
+    position: relative;
+    border-radius: 26px;
+    padding: 3.1rem 3.1rem 3.35rem;
+    margin-bottom: 2.25rem;
+    overflow: hidden;
+    background: linear-gradient(135deg, rgba(7, 17, 36, 0.92) 0%, rgba(11, 27, 58, 0.88) 55%, rgba(17, 42, 92, 0.84) 100%);
+    border: 1px solid rgba(148, 163, 184, 0.24);
+    box-shadow:
+        0 28px 64px -20px rgba(2, 6, 23, 0.72),
+        inset 0 1px 0 rgba(255, 255, 255, 0.16);
+    color: #f8fafc;
 }
 
-/* Welcome Section */
-.welcome-section {
-    background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 100%);
-    color: white;
-    padding: 4rem 0;
-    text-align: center;
-    position: relative;
+.hero-backdrop-art {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 0;
+    pointer-events: none;
     overflow: hidden;
 }
 
-.welcome-section::before {
-    content: '';
+.hero-backdrop-img {
     position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: radial-gradient(circle at 50% 50%, rgba(56, 189, 248, 0.1) 0%, transparent 70%);
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: 78% center;
+    opacity: 0.94;
+    filter: saturate(1.12) contrast(1.05);
+    transform-origin: 72% 48%;
+    animation: heroSculptureFloat 16s ease-in-out infinite alternate;
+    will-change: transform;
+}
+
+/* Orbes Aurora Bioluminiscentes Animados */
+.hero-aurora-orb {
+    position: absolute;
+    border-radius: 9999px;
+    filter: blur(46px);
+    opacity: 0.48;
+    pointer-events: none;
+    mix-blend-mode: screen;
+}
+
+.hero-aurora-cyan {
+    width: 340px;
+    height: 340px;
+    top: -80px;
+    right: 12%;
+    background: radial-gradient(circle, rgba(56, 189, 248, 0.65) 0%, rgba(56, 189, 248, 0) 70%);
+    animation: auroraOrbitA 12s ease-in-out infinite alternate;
+}
+
+.hero-aurora-rose {
+    width: 280px;
+    height: 280px;
+    bottom: -95px;
+    left: 34%;
+    background: radial-gradient(circle, rgba(251, 113, 133, 0.48) 0%, rgba(251, 113, 133, 0) 72%);
+    animation: auroraOrbitB 14s ease-in-out infinite alternate;
+}
+
+/* Reflejo Diagonal Cristalino Animado */
+.hero-sheen-sweep {
+    position: absolute;
+    top: -40%;
+    left: -55%;
+    width: 45%;
+    height: 190%;
+    background: linear-gradient(
+        105deg,
+        transparent 0%,
+        rgba(255, 255, 255, 0.03) 42%,
+        rgba(125, 211, 252, 0.1) 50%,
+        rgba(255, 255, 255, 0.03) 58%,
+        transparent 100%
+    );
+    transform: rotate(16deg);
+    animation: heroGlassSheen 10s ease-in-out infinite;
     pointer-events: none;
 }
 
-.welcome-content {
+.hero-backdrop-scrim {
+    position: absolute;
+    inset: 0;
+    background:
+        linear-gradient(96deg, rgba(6, 12, 26, 0.94) 0%, rgba(9, 18, 40, 0.82) 45%, rgba(9, 18, 40, 0.2) 100%),
+        radial-gradient(circle at 75% 45%, rgba(56, 189, 248, 0.14) 0%, transparent 55%);
+}
+
+.hero-grid-layout {
     position: relative;
-    z-index: 1;
+    z-index: 2;
+    display: grid;
+    grid-template-columns: 1.25fr 0.85fr;
+    gap: 2.25rem;
+    align-items: center;
 }
 
-.welcome-content h1 {
-    font-size: 3.5rem;
-    font-weight: 700;
-    margin-bottom: 0.5rem;
-    letter-spacing: -0.02em;
+.hero-main-col {
+    text-align: left;
 }
 
-.subtitle {
-    font-size: 1.25rem;
-    color: #38bdf8;
-    margin-bottom: 1rem;
-    font-weight: 500;
+.hero-anim-1,
+.hero-anim-2,
+.hero-anim-3,
+.hero-anim-4 {
+    animation: heroEnterUp 0.75s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
-.tagline {
-    font-size: 1.125rem;
+.hero-anim-1 { animation-delay: 0.04s; }
+.hero-anim-2 { animation-delay: 0.12s; }
+.hero-anim-3 { animation-delay: 0.2s; }
+.hero-anim-4 { animation-delay: 0.28s; }
+
+.hero-status-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.55rem;
+    padding: 0.42rem 1rem;
+    border-radius: 9999px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    color: #e0f2fe;
+    background: rgba(255, 255, 255, 0.09);
+    border: 1px solid rgba(125, 211, 252, 0.28);
+    backdrop-filter: blur(14px);
+    box-shadow: 0 8px 20px -8px rgba(14, 165, 233, 0.4);
+    margin-bottom: 1.25rem;
+}
+
+.hero-editorial-title {
+    font-size: clamp(2.15rem, 3.8vw, 3.25rem);
+    font-weight: 800;
+    line-height: 1.07;
+    letter-spacing: -0.035em;
+    color: #ffffff;
+    margin-bottom: 0.75rem;
+}
+
+.hero-title-accent {
+    background: linear-gradient(120deg, #7dd3fc 0%, #38bdf8 30%, #fda4af 62%, #7dd3fc 100%);
+    background-size: 220% auto;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    animation: heroAccentShimmer 6.5s ease-in-out infinite;
+}
+
+.welcome-content .subtitle {
+    font-size: 1rem;
+    color: #7dd3fc;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    margin-bottom: 0.75rem;
+}
+
+.welcome-content .tagline {
+    font-size: 1rem;
     color: #cbd5e1;
-    margin-bottom: 2.5rem;
-    max-width: 600px;
-    margin-left: auto;
-    margin-right: auto;
+    line-height: 1.65;
+    max-width: 560px;
+    margin: 0 0 1.85rem 0;
 }
 
 .welcome-actions {
     display: flex;
-    gap: 1rem;
-    justify-content: center;
+    gap: 0.72rem;
+    justify-content: flex-start;
     flex-wrap: wrap;
 }
 
-/* Info Grid */
+/* Floating Frosted Bento Widgets Animados (Derecha del Hero) */
+.hero-widgets-col {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 4.5rem;
+    min-height: 295px;
+}
+
+.floating-pill-widget {
+    display: inline-flex;
+    align-items: center;
+    gap: 1.15rem;
+    padding: 0.85rem 1.2rem;
+    border-radius: 18px;
+    background: rgba(255, 255, 255, 0.92);
+    color: #0f172a;
+    box-shadow: 0 20px 40px -12px rgba(2, 6, 23, 0.6);
+    backdrop-filter: blur(16px);
+    border: 1px solid rgba(255, 255, 255, 0.9);
+    animation: widgetFloatA 6.8s ease-in-out infinite;
+    will-change: transform;
+}
+
+.floating-widget-kicker {
+    display: block;
+    font-size: 0.68rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #64748b;
+}
+
+.floating-glass-telemetry .floating-widget-kicker {
+    color: #94a3b8;
+}
+
+.floating-widget-title {
+    font-size: 0.96rem;
+    font-weight: 700;
+    color: #0f172a;
+}
+
+.mini-bars {
+    display: inline-flex;
+    align-items: flex-end;
+    gap: 4px;
+    height: 28px;
+}
+
+.mini-bars span {
+    width: 4px;
+    border-radius: 9999px;
+    background: linear-gradient(180deg, #38bdf8, #2563eb);
+    opacity: 0.85;
+    transform-origin: bottom center;
+    animation: barRhythm 2.2s ease-in-out infinite;
+}
+
+.mini-bars span.is-peak {
+    background: linear-gradient(180deg, #fb7185, #38bdf8);
+    opacity: 1;
+}
+
+.floating-glass-telemetry {
+    width: 100%;
+    max-width: 320px;
+    padding: 1.15rem 1.3rem;
+    border-radius: 20px;
+    background: rgba(11, 20, 40, 0.72);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    box-shadow:
+        0 22px 44px -15px rgba(2, 6, 23, 0.76),
+        inset 0 1px 0 rgba(255, 255, 255, 0.16);
+    backdrop-filter: blur(22px) saturate(165%);
+    animation: widgetFloatB 8.2s ease-in-out infinite;
+    will-change: transform;
+}
+
+.telemetry-row-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 0.75rem;
+}
+
+.telemetry-metric-main {
+    font-size: 1.55rem;
+    font-weight: 800;
+    color: #ffffff;
+    line-height: 1.15;
+    margin-top: 0.2rem;
+    font-variant-numeric: tabular-nums;
+}
+
+.telemetry-metric-main small {
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: #94a3b8;
+}
+
+.telemetry-tag-glow {
+    padding: 0.28rem 0.65rem;
+    border-radius: 9999px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    color: #7dd3fc;
+    background: rgba(56, 189, 248, 0.16);
+    border: 1px solid rgba(56, 189, 248, 0.35);
+    white-space: nowrap;
+}
+
+.hero-waveform-svg {
+    width: 100%;
+    height: 48px;
+    margin: 0.45rem 0 0.35rem;
+    display: block;
+    overflow: visible;
+}
+
+.hero-node-ring {
+    transform-origin: 140px 27px;
+    animation: nodePulseHalo 2.6s ease-out infinite;
+}
+
+.hero-node-core {
+    transform-origin: 140px 27px;
+    animation: nodeCorePulse 2.6s ease-in-out infinite;
+}
+
+.telemetry-foot {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.72rem;
+    color: #94a3b8;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    padding-top: 0.55rem;
+}
+
+/* Keyframes Hero */
+@keyframes heroSculptureFloat {
+    0% {
+        transform: scale(1.02) translate3d(0, 0, 0);
+    }
+    50% {
+        transform: scale(1.075) translate3d(-1.4%, -1%, 0);
+    }
+    100% {
+        transform: scale(1.045) translate3d(0.9%, 0.7%, 0);
+    }
+}
+
+@keyframes auroraOrbitA {
+    0% { transform: translate3d(0, 0, 0) scale(1); }
+    100% { transform: translate3d(-42px, 28px, 0) scale(1.18); }
+}
+
+@keyframes auroraOrbitB {
+    0% { transform: translate3d(0, 0, 0) scale(1); }
+    100% { transform: translate3d(38px, -24px, 0) scale(1.15); }
+}
+
+@keyframes heroGlassSheen {
+    0% { left: -60%; opacity: 0; }
+    20% { opacity: 0.9; }
+    55% { left: 135%; opacity: 0.85; }
+    100% { left: 135%; opacity: 0; }
+}
+
+@keyframes heroEnterUp {
+    from {
+        opacity: 0;
+        transform: translate3d(0, 14px, 0);
+    }
+    to {
+        opacity: 1;
+        transform: translate3d(0, 0, 0);
+    }
+}
+
+@keyframes heroAccentShimmer {
+    0%, 100% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+}
+
+@keyframes widgetFloatA {
+    0%, 100% { transform: translate3d(0, 0, 0); }
+    50% { transform: translate3d(-5px, -8px, 0); }
+}
+
+@keyframes widgetFloatB {
+    0%, 100% { transform: translate3d(0, 0, 0); }
+    50% { transform: translate3d(4px, -9px, 0); }
+}
+
+@keyframes barRhythm {
+    0%, 100% { transform: scaleY(0.76); opacity: 0.72; }
+    50% { transform: scaleY(1.12); opacity: 1; }
+}
+
+@keyframes nodePulseHalo {
+    0% { transform: scale(0.75); opacity: 0.85; }
+    70% { transform: scale(1.75); opacity: 0; }
+    100% { transform: scale(1.75); opacity: 0; }
+}
+
+@keyframes nodeCorePulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.22); }
+}
+
+/* Pilares Especialidad & Contacto */
 .info-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-    gap: 1.5rem;
-    padding: 3rem 0;
+    grid-template-columns: repeat(auto-fit, minmax(235px, 1fr));
+    gap: 1.25rem;
+    margin: 2rem 0 1.5rem;
 }
 
 .info-card {
     background: var(--card-bg);
-    border-radius: 12px;
-    padding: 2rem;
-    text-align: center;
+    backdrop-filter: blur(20px) saturate(155%);
+    border-radius: 20px;
+    padding: 1.75rem;
     border: 1px solid var(--border-color);
-    transition: all 0.3s;
+    box-shadow: var(--shadow-sm), inset 0 1px 0 var(--specular-highlight);
+    transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
+    text-align: left;
 }
 
 .info-card:hover {
     transform: translateY(-4px);
     box-shadow: var(--shadow-lg);
-    border-color: var(--primary-color);
+    border-color: rgba(56, 189, 248, 0.45);
 }
 
-.info-icon {
-    font-size: 3rem;
-    margin-bottom: 1rem;
+.info-icon-ring {
+    width: 46px;
+    height: 46px;
+    border-radius: 14px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 1.1rem;
+    color: #60a5fa;
+    background: rgba(59, 130, 246, 0.14);
+    border: 1px solid rgba(59, 130, 246, 0.28);
+}
+
+.info-icon-ring svg {
+    width: 22px;
+    height: 22px;
+}
+
+.info-icon-cyan {
+    color: #38bdf8;
+    background: rgba(14, 165, 233, 0.14);
+    border-color: rgba(14, 165, 233, 0.28);
+}
+
+.info-icon-rose {
+    color: #fb7185;
+    background: rgba(244, 63, 94, 0.14);
+    border-color: rgba(244, 63, 94, 0.28);
+}
+
+.info-icon-amber {
+    color: #fbbf24;
+    background: rgba(245, 158, 11, 0.14);
+    border-color: rgba(245, 158, 11, 0.28);
 }
 
 .info-card h3 {
     color: var(--text-color);
-    margin-bottom: 1rem;
-    font-size: 1.25rem;
+    margin-bottom: 0.5rem;
+    font-size: 1.08rem;
+    font-weight: 700;
 }
 
 .info-card p {
     color: var(--text-secondary);
+    font-size: 0.9rem;
     line-height: 1.6;
 }
 
-/* Contact Section */
 .contact-section {
-    padding: 3rem 0;
-    background: var(--bg-color);
+    padding: 0.75rem 0 1.5rem;
 }
 
 .contact-card {
     background: var(--card-bg);
-    border-radius: 16px;
-    padding: 3rem;
-    text-align: center;
+    backdrop-filter: blur(20px) saturate(155%);
+    border-radius: 20px;
+    padding: 2rem 2.25rem;
     border: 1px solid var(--border-color);
-    max-width: 800px;
-    margin: 0 auto;
+    box-shadow: var(--shadow-sm), inset 0 1px 0 var(--specular-highlight);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 1.5rem;
 }
 
-.contact-card h3 {
+.contact-card-copy h3 {
     color: var(--text-color);
-    font-size: 1.75rem;
-    margin-bottom: 1rem;
+    font-size: 1.35rem;
+    font-weight: 700;
+    margin: 0.3rem 0 0.35rem;
 }
 
-.contact-card p {
+.contact-card-copy p {
     color: var(--text-secondary);
-    margin-bottom: 2rem;
+    font-size: 0.93rem;
+    margin: 0;
 }
 
-.contact-info p {
+.contact-pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.65rem;
+}
+
+.contact-pill-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.55rem 1rem;
+    border-radius: 9999px;
+    font-size: 0.85rem;
+    font-weight: 600;
     color: var(--text-color);
-    margin: 0.5rem 0;
-    font-size: 1.1rem;
+    background: var(--surface-subtle);
+    border: 1px solid var(--border-color);
 }
 
-/* Dark mode adjustments */
-[data-theme="dark"] .welcome-section {
-    background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 100%);
+@media (max-width: 960px) {
+    .welcome-section.welcome-hero-glass {
+        padding: 2.25rem 1.75rem;
+    }
+
+    .hero-grid-layout {
+        grid-template-columns: 1fr;
+        gap: 1.75rem;
+    }
+
+    .hero-widgets-col {
+        align-items: stretch;
+        gap: 1rem;
+        min-height: auto;
+    }
+
+    .floating-glass-telemetry {
+        max-width: 100%;
+    }
 }
 
-[data-theme="dark"] .info-card,
-[data-theme="dark"] .contact-card {
-    background: #1e293b;
-    border-color: #334155;
+@media (prefers-reduced-motion: reduce) {
+    .hero-backdrop-img,
+    .hero-aurora-orb,
+    .hero-sheen-sweep,
+    .hero-title-accent,
+    .hero-anim-1,
+    .hero-anim-2,
+    .hero-anim-3,
+    .hero-anim-4,
+    .floating-pill-widget,
+    .floating-glass-telemetry,
+    .mini-bars span,
+    .hero-node-ring,
+    .hero-node-core {
+        animation: none !important;
+    }
 }

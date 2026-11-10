@@ -2,439 +2,566 @@
 {% load static clinica_extras %}
 
 {% block content %}
-<!-- Hero Section -->
-<div class="welcome-section">
-    <div class="welcome-content">
-        <h1>Centro Nodo</h1>
-        <p class="subtitle">Salud Mental Integral</p>
-        <p class="tagline">
-            {% if user.is_authenticated %}
-                Bienvenido/a, <strong>{{ user.get_full_name|default:user.username }}</strong> &bull; Panel de {{ user.rol.nombre|default:"Usuario" }}
-            {% else %}
-                Transformando vidas a través del cuidado profesional y humano
-            {% endif %}
-        </p>
-        <div class="welcome-actions">
-            <a href="{% url 'agendamiento' %}" class="btn btn-primary">
-                {% if tipo_dashboard == 'paciente' %}Agendar Consulta{% else %}Ver Agenda{% endif %}
-            </a>
-            {% if user.es_staff_clinico %}
-                <a href="{% url 'pacientes_lista' %}" class="btn btn-secondary">Gestionar Pacientes</a>
-            {% endif %}
-            {% if user.es_administrador or user.es_profesional %}
-                <a href="{% url 'fichas_lista' %}" class="btn btn-secondary">Fichas Clínicas</a>
-            {% elif user.es_paciente %}
-                <a href="{% url 'fichas_lista' %}" class="btn btn-secondary">Mi Ficha Clínica</a>
-            {% endif %}
-            {% if user.es_administrador or user.es_profesional or user.es_paciente %}
-                <a href="{% url 'telemedicina' %}" class="btn btn-secondary">Telemedicina</a>
-            {% endif %}
-            {% if user.is_authenticated %}
-                <a href="{% url 'caja' %}" class="btn btn-secondary">
+<!-- Hero Glass Clínico (Animado · Salud & Telemetría Moderna) -->
+<section class="welcome-section welcome-hero-glass">
+    <div class="hero-backdrop-art" aria-hidden="true">
+        <img src="{% static 'img/hero-neuro-salud.jpg' %}?v=20261110-2" alt="" class="hero-backdrop-img">
+        <span class="hero-aurora-orb hero-aurora-cyan"></span>
+        <span class="hero-aurora-orb hero-aurora-rose"></span>
+        <span class="hero-sheen-sweep"></span>
+        <div class="hero-backdrop-scrim"></div>
+    </div>
+
+    <div class="hero-grid-layout">
+        <div class="welcome-content hero-main-col">
+            <div class="hero-status-pill hero-anim-1">
+                <span class="pulse-dot"></span>
+                <span>
+                    {% if user.is_authenticated %}
+                    Panel de {{ user.rol.nombre|default:"Usuario" }} &bull; Atención Integral
+                    {% else %}
+                    Centro Nodo &bull; Salud Mental Integral
+                    {% endif %}
+                </span>
+            </div>
+
+            <h1 class="hero-editorial-title hero-anim-2">
+                Tu salud y bienestar en <span class="hero-title-accent">buenas manos</span>
+            </h1>
+
+            <p class="subtitle hero-anim-3">Centro Nodo &mdash; Neurocuidado, Psicoterapia &amp; Telemedicina</p>
+
+            <p class="tagline hero-anim-3">
+                {% if user.is_authenticated %}
+                Bienvenido/a, <strong>{{ user.get_full_name|default:user.username }}</strong>. Gestiona tu atención
+                clínica con expedientes cifrados, agenda en tiempo real y consultas WebRTC P2P.
+                {% else %}
+                Transformando vidas a través del cuidado profesional, humano y tecnología clínica segura.
+                {% endif %}
+            </p>
+
+            <div class="welcome-actions hero-anim-4">
+                <a href="{% url 'agendamiento' %}" class="btn btn-primary btn-pill">
+                    {% if tipo_dashboard == 'paciente' %}Agendar Consulta{% else %}Ver Agenda{% endif %}
+                </a>
+                {% if user.es_staff_clinico %}
+                <a href="{% url 'pacientes_lista' %}" class="btn btn-glass btn-pill">Gestionar Pacientes</a>
+                {% endif %}
+                {% if user.es_administrador or user.es_profesional %}
+                <a href="{% url 'fichas_lista' %}" class="btn btn-glass btn-pill">Fichas Clínicas</a>
+                {% elif user.es_paciente %}
+                <a href="{% url 'fichas_lista' %}" class="btn btn-glass btn-pill">Mi Ficha Clínica</a>
+                {% endif %}
+                {% if user.es_administrador or user.es_profesional or user.es_paciente %}
+                <a href="{% url 'telemedicina' %}" class="btn btn-glass btn-pill">Telemedicina</a>
+                {% endif %}
+                {% if user.is_authenticated %}
+                <a href="{% url 'caja' %}" class="btn btn-glass btn-pill">
                     {% if user.es_administrador or user.es_recepcionista %}Caja y Pagos
                     {% elif user.es_profesional %}Mis Honorarios
                     {% else %}Mis Pagos{% endif %}
                 </a>
-            {% endif %}
-        </div>
-    </div>
-</div>
-
-{% if user.is_authenticated %}
-    {% if tipo_dashboard == 'profesional' %}
-        <!-- PANEL PROFESIONAL -->
-        <div class="stats-grid">
-            <div class="stat-card">
-                <span class="stat-label">Citas para Hoy</span>
-                <span class="stat-value">{{ citas_hoy_count }}</span>
-            </div>
-            <div class="stat-card">
-                <span class="stat-label">Atenciones Registradas</span>
-                <span class="stat-value">{{ atenciones_realizadas_count }}</span>
-            </div>
-            <div class="stat-card">
-                <span class="stat-label">Pendientes de Evolución</span>
-                <span class="stat-value">{{ citas_sin_evolucion|length }}</span>
-            </div>
-            <div class="stat-card">
-                <span class="stat-label">Salas Telemedicina Activas</span>
-                <span class="stat-value">{{ videoconsultas_pendientes|length }}</span>
-            </div>
-        </div>
-
-        {% if citas_sin_evolucion %}
-            <div class="panel-card">
-                <h3>📝 Citas Realizadas Pendientes de Evolución Clínica</h3>
-                <div class="table-wrapper">
-                    <table class="data-table">
-                        <thead>
-                            <tr>
-                                <th>Fecha / Hora</th>
-                                <th>Paciente</th>
-                                <th>Modalidad</th>
-                                <th>Acción</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for c in citas_sin_evolucion %}
-                            <tr>
-                                <td>
-                                    <strong>{{ c.fechaHoraInicio|date:"d/m/Y" }}</strong>
-                                    <small class="timeline-meta">{{ c.fechaHoraInicio|date:"H:i" }}</small>
-                                </td>
-                                <td>{{ c.paciente.nombres }} {{ c.paciente.apellidos }} <small class="timeline-meta">({{ c.paciente.rut }})</small></td>
-                                <td>
-                                    {% if c.videoconsulta %}
-                                        <span class="status-badge status-confirmada">📹 Telemedicina</span>
-                                    {% else %}
-                                        <span class="status-badge status-pendiente">🏥 Presencial</span>
-                                    {% endif %}
-                                </td>
-                                <td>
-                                    <div class="actions-inline">
-                                        {% if c.paciente.ficha_clinica %}
-                                            <a href="{% url 'ficha_detalle' c.paciente.ficha_clinica.id %}?cita_id={{ c.id }}" class="btn btn-sm btn-primary">
-                                                Registrar Evolución
-                                            </a>
-                                        {% endif %}
-                                        {% if c.videoconsulta %}
-                                            <a href="{% url 'telemedicina_sala' c.videoconsulta.id %}" class="btn btn-sm btn-secondary">
-                                                Abrir Sala Dual
-                                            </a>
-                                        {% endif %}
-                                    </div>
-                                </td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        {% endif %}
-
-        {% if videoconsultas_pendientes %}
-            <div class="panel-card">
-                <div class="page-header" style="margin-bottom: 1rem; padding-bottom: 0.75rem;">
-                    <div><h3 style="margin-bottom: 0;">📹 Próximas Videoconsultas (Panel Dual)</h3></div>
-                    <a href="{% url 'telemedicina' %}" class="btn btn-sm btn-secondary">Ver Todas las Salas</a>
-                </div>
-                <div class="table-wrapper">
-                    <table class="data-table">
-                        <thead>
-                            <tr>
-                                <th>Fecha y Hora</th>
-                                <th>Paciente</th>
-                                <th>Estado Sala</th>
-                                <th>Acceso</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for vc in videoconsultas_pendientes %}
-                            <tr>
-                                <td>
-                                    <strong>{{ vc.cita.fechaHoraInicio|date:"d/m/Y" }}</strong>
-                                    <small class="timeline-meta">{{ vc.cita.fechaHoraInicio|date:"H:i" }}</small>
-                                </td>
-                                <td>{{ vc.cita.paciente.nombres }} {{ vc.cita.paciente.apellidos }}</td>
-                                <td><span class="status-badge status-{{ vc.estadoConexion|lower|slugify }}">{{ vc.estadoConexion }}</span></td>
-                                <td>
-                                    <a href="{% url 'telemedicina_sala' vc.id %}" class="btn btn-sm btn-primary">Entrar a Sala Dual</a>
-                                </td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        {% endif %}
-
-    {% elif tipo_dashboard == 'paciente' %}
-        <!-- PANEL PACIENTE -->
-        <div class="stats-grid">
-            <div class="stat-card">
-                <span class="stat-label">Citas para Hoy</span>
-                <span class="stat-value">{{ citas_hoy_count }}</span>
-            </div>
-            <div class="stat-card">
-                <span class="stat-label">Sesiones Realizadas</span>
-                <span class="stat-value">{{ sesiones_realizadas_count }}</span>
-            </div>
-            <div class="stat-card">
-                <span class="stat-label">Pagos Pendientes</span>
-                <span class="stat-value">{{ pagos_pendientes_count }}</span>
-            </div>
-        </div>
-
-        <div class="panel-card">
-            <h3>🗓️ Tu Próxima Consulta</h3>
-            {% if proxima_cita %}
-                <div class="info-kv-list">
-                    <div class="info-kv-item">
-                        <span class="info-kv-label">Fecha y Horario</span>
-                        <span class="info-kv-value">
-                            <strong>{{ proxima_cita.fechaHoraInicio|date:"d/m/Y" }}</strong> de {{ proxima_cita.fechaHoraInicio|date:"H:i" }} a {{ proxima_cita.fechaHoraFin|date:"H:i" }}
-                        </span>
-                    </div>
-                    <div class="info-kv-item">
-                        <span class="info-kv-label">Especialista</span>
-                        <span class="info-kv-value">
-                            {{ proxima_cita.profesional.nombres }} {{ proxima_cita.profesional.apellidos }} ({{ proxima_cita.profesional.especialidad }})
-                        </span>
-                    </div>
-                    <div class="info-kv-item">
-                        <span class="info-kv-label">Modalidad y Estado</span>
-                        <span class="info-kv-value">
-                            {% if proxima_cita.videoconsulta %}
-                                <span class="status-badge status-confirmada">📹 Telemedicina</span>
-                            {% else %}
-                                <span class="status-badge status-pendiente">🏥 Presencial (Manuel Antonio Matta 549, Osorno)</span>
-                            {% endif %}
-                            <span class="status-badge status-{{ proxima_cita.estado|lower|slugify }}">{{ proxima_cita.estado }}</span>
-                        </span>
-                    </div>
-                </div>
-                <div class="actions-inline" style="margin-top: 1.25rem;">
-                    {% if proxima_cita.videoconsulta %}
-                        <a href="{% url 'telemedicina_sala' proxima_cita.videoconsulta.id %}" class="btn btn-primary">
-                            📹 Entrar a Sala de Videoconsulta
-                        </a>
-                    {% endif %}
-                    <a href="{% url 'agendamiento' %}" class="btn btn-secondary">Gestionar mis Citas</a>
-                </div>
-            {% else %}
-                <div class="empty-state" style="padding: 1.5rem;">
-                    <p>No tienes citas futuras agendadas. <a href="{% url 'agendamiento' %}" style="color: var(--primary-color);">Reserva tu próxima hora aquí</a>.</p>
-                </div>
-            {% endif %}
-        </div>
-
-        <div class="panel-card">
-            <div class="page-header" style="margin-bottom: 1rem; padding-bottom: 0.75rem;">
-                <div><h3 style="margin-bottom: 0;">💊 Últimas Indicaciones Terapéuticas</h3></div>
-                {% if ficha_paciente %}
-                    <a href="{% url 'ficha_detalle' ficha_paciente.id %}" class="btn btn-sm btn-secondary">Ver Mi Ficha Completa</a>
                 {% endif %}
             </div>
+        </div>
 
-            {% if ultimas_indicaciones %}
-                <div class="timeline">
-                    {% for atencion in ultimas_indicaciones %}
-                        <div class="timeline-item">
-                            <div class="timeline-header">
-                                <div>
-                                    <strong>{{ atencion.profesional.nombres }} {{ atencion.profesional.apellidos }}</strong>
-                                    <span class="timeline-meta">({{ atencion.profesional.especialidad }})</span>
-                                </div>
-                                <div class="timeline-meta">{{ atencion.fechaHora|date:"d/m/Y H:i" }}</div>
-                            </div>
-                            <div class="clinical-block">
-                                <div class="clinical-block-title">Diagnóstico</div>
-                                <p>{{ atencion.diagnostico|linebreaksbr }}</p>
-                            </div>
-                            {% if atencion.indicacionesTratamiento %}
-                                <div class="clinical-block">
-                                    <div class="clinical-block-title">Indicaciones para tu Tratamiento</div>
-                                    <p>{{ atencion.indicacionesTratamiento|linebreaksbr }}</p>
-                                </div>
+        <!-- Widgets Flotantes Bento Animados sobre la Ilustración Clínica -->
+        <div class="hero-widgets-col" aria-hidden="true">
+            <div class="floating-pill-widget">
+                <div>
+                    <span class="floating-widget-kicker">Indicador de Cuidado</span>
+                    <strong class="floating-widget-title">Continuidad Clínica</strong>
+                </div>
+                <div class="mini-bars">
+                    <span style="height: 36%; animation-delay: 0s;"></span>
+                    <span style="height: 58%; animation-delay: 0.14s;"></span>
+                    <span style="height: 48%; animation-delay: 0.28s;"></span>
+                    <span style="height: 76%; animation-delay: 0.42s;"></span>
+                    <span style="height: 92%; animation-delay: 0.56s;"></span>
+                    <span style="height: 100%; animation-delay: 0.7s;" class="is-peak"></span>
+                </div>
+            </div>
+
+            <div class="floating-glass-telemetry">
+                <div class="telemetry-row-top">
+                    <div>
+                        <span class="floating-widget-kicker">Resumen de Jornada</span>
+                        <div class="telemetry-metric-main">
+                            {% if user.is_authenticated %}
+                            {{ citas_hoy_count }} <small>cita{{ citas_hoy_count|pluralize }} hoy</small>
+                            {% else %}
+                            24/7 <small>portal activo</small>
                             {% endif %}
-                            <div class="actions-inline no-print" style="margin-top: 0.85rem;">
-                                <a href="{% url 'atencion_documento' atencion.id %}?tipo=indicaciones" class="btn btn-sm btn-secondary">
-                                    📄 Indicaciones PDF
-                                </a>
-                                <a href="{% url 'atencion_documento' atencion.id %}?tipo=certificado" class="btn btn-sm btn-secondary">
-                                    📜 Certificado Asistencia
-                                </a>
-                            </div>
                         </div>
-                    {% endfor %}
+                    </div>
+                    <span class="telemetry-tag-glow">Fernet E2E</span>
                 </div>
-            {% else %}
-                <div class="empty-state" style="padding: 1.5rem;">
-                    <p>Aún no registras indicaciones clínicas asociadas a tus consultas.</p>
+
+                <svg class="hero-waveform-svg" viewBox="0 0 280 54" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path
+                        d="M2 30C24 30 34 19 52 24C68 28 76 42 94 27C110 14 124 8 140 27C154 42 168 38 184 22C200 7 216 32 236 26C250 22 264 26 278 26"
+                        stroke="rgba(148,163,184,0.22)" stroke-width="2" stroke-linecap="round" />
+                    <path class="wave-live-pulse"
+                        d="M2 30C24 30 34 19 52 24C68 28 76 42 94 27C110 14 124 8 140 27C154 42 168 38 184 22C200 7 216 32 236 26C250 22 264 26 278 26"
+                        stroke="url(#heroWaveStroke)" stroke-width="2.6" stroke-linecap="round" />
+                    <circle class="hero-node-ring" cx="140" cy="27" r="10" fill="#38BDF8" fill-opacity="0.24" />
+                    <circle class="hero-node-core" cx="140" cy="27" r="4.5" fill="#7DD3FC" />
+                    <defs>
+                        <linearGradient id="heroWaveStroke" x1="2" y1="27" x2="278" y2="27"
+                            gradientUnits="userSpaceOnUse">
+                            <stop stop-color="#38BDF8" stop-opacity="0.25" />
+                            <stop offset="0.5" stop-color="#38BDF8" />
+                            <stop offset="0.82" stop-color="#FB7185" />
+                            <stop offset="1" stop-color="#F59E0B" stop-opacity="0.35" />
+                        </linearGradient>
+                    </defs>
+                </svg>
+
+                <div class="telemetry-foot">
+                    <span>Osorno · Telemedicina WebRTC</span>
+                    <span>Privacidad Clínica Activa</span>
                 </div>
-            {% endif %}
+            </div>
         </div>
-
-    {% else %}
-        <!-- PANEL ADMINISTRADOR / RECEPCIONISTA -->
-        <div class="stats-grid">
-            <div class="stat-card">
-                <span class="stat-label">Citas para Hoy</span>
-                <span class="stat-value">{{ citas_hoy_count }}</span>
-            </div>
-            <div class="stat-card">
-                <span class="stat-label">Pacientes Registrados</span>
-                <span class="stat-value">{{ total_pacientes }}</span>
-            </div>
-            <div class="stat-card">
-                <span class="stat-label">Ingresos Hoy</span>
-                <span class="stat-value">{{ ingresos_hoy|clp }}</span>
-            </div>
-            <div class="stat-card">
-                <span class="stat-label">Ingresos del Mes</span>
-                <span class="stat-value">{{ ingresos_mes|clp }}</span>
-            </div>
-            <div class="stat-card">
-                <span class="stat-label">Citas Pendientes de Cobro</span>
-                <span class="stat-value">{{ citas_sin_pago_count }}</span>
-            </div>
-            {% if total_fichas is not None %}
-                <div class="stat-card">
-                    <span class="stat-label">Fichas / Atenciones</span>
-                    <span class="stat-value">{{ total_fichas }} / {{ total_atenciones }}</span>
-                </div>
-            {% endif %}
-        </div>
-
-        {% if citas_hoy_lista %}
-            <div class="panel-card">
-                <div class="page-header" style="margin-bottom: 1rem; padding-bottom: 0.75rem;">
-                    <div><h3 style="margin-bottom: 0;">🕒 Agenda de Hoy ({{ citas_hoy_count }})</h3></div>
-                    <a href="{% url 'caja' %}" class="btn btn-sm btn-primary">Ir a Caja y Cobros</a>
-                </div>
-                <div class="table-wrapper">
-                    <table class="data-table">
-                        <thead>
-                            <tr>
-                                <th>Horario</th>
-                                <th>Paciente</th>
-                                <th>Profesional</th>
-                                <th>Estado</th>
-                                <th>Gestión Rápida</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for c in citas_hoy_lista %}
-                            <tr>
-                                <td><strong>{{ c.fechaHoraInicio|date:"H:i" }} - {{ c.fechaHoraFin|date:"H:i" }}</strong></td>
-                                <td>{{ c.paciente.nombres }} {{ c.paciente.apellidos }} <br><small class="timeline-meta">{{ c.paciente.rut }}</small></td>
-                                <td>{{ c.profesional.nombres }} {{ c.profesional.apellidos }}</td>
-                                <td><span class="status-badge status-{{ c.estado|lower|slugify }}">{{ c.estado }}</span></td>
-                                <td>
-                                    <div class="actions-inline">
-                                        {% if c.estado == 'Agendada' %}
-                                            <form method="POST" action="{% url 'cita_cambiar_estado' c.id %}">
-                                                {% csrf_token %}
-                                                <input type="hidden" name="estado" value="Confirmada">
-                                                <button type="submit" class="btn btn-sm btn-success">Confirmar</button>
-                                            </form>
-                                        {% endif %}
-                                        <a href="{% url 'caja' %}?cita_id={{ c.id }}" class="btn btn-sm btn-secondary">💳 Cobrar</a>
-                                    </div>
-                                </td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        {% endif %}
-    {% endif %}
-
-    <!-- Próximas Citas (Vista transversal resumida) -->
-    <div class="panel-card">
-        <div class="page-header" style="margin-bottom: 1rem; padding-bottom: 0.75rem;">
-            <div>
-                <h3 style="margin-bottom: 0;">📅 Próximas Citas</h3>
-            </div>
-            <a href="{% url 'agendamiento' %}" class="btn btn-sm btn-secondary">Ver Agenda Completa</a>
-        </div>
-
-        {% if proximas_citas %}
-            <div class="table-wrapper">
-                <table class="data-table">
-                    <thead>
-                        <tr>
-                            <th>Fecha y Hora</th>
-                            <th>Paciente</th>
-                            <th>Profesional</th>
-                            <th>Modalidad</th>
-                            <th>Estado</th>
-                            <th>Acción</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for cita in proximas_citas %}
-                        <tr>
-                            <td>
-                                <strong>{{ cita.fechaHoraInicio|date:"d/m/Y" }}</strong><br>
-                                <small class="timeline-meta">{{ cita.fechaHoraInicio|date:"H:i" }} - {{ cita.fechaHoraFin|date:"H:i" }}</small>
-                            </td>
-                            <td>{{ cita.paciente.nombres }} {{ cita.paciente.apellidos }}</td>
-                            <td>{{ cita.profesional.nombres }} {{ cita.profesional.apellidos }}</td>
-                            <td>
-                                {% if cita.videoconsulta %}
-                                    <span class="status-badge status-confirmada">📹 Telemedicina</span>
-                                {% else %}
-                                    <span class="status-badge status-pendiente">🏥 Presencial</span>
-                                {% endif %}
-                            </td>
-                            <td>
-                                <span class="status-badge status-{{ cita.estado|lower|slugify }}">{{ cita.estado }}</span>
-                            </td>
-                            <td>
-                                <div class="actions-inline">
-                                    {% if cita.videoconsulta %}
-                                        {% if user.es_administrador or user.es_profesional or user.es_paciente %}
-                                            <a href="{% url 'telemedicina_sala' cita.videoconsulta.id %}" class="btn btn-sm btn-primary">Sala Dual</a>
-                                        {% endif %}
-                                    {% endif %}
-                                    {% if user.es_administrador or user.es_profesional %}
-                                        {% if not cita.atencion_clinica and cita.paciente.ficha_clinica %}
-                                            <a href="{% url 'ficha_detalle' cita.paciente.ficha_clinica.id %}?cita_id={{ cita.id }}" class="btn btn-sm btn-secondary">Ficha</a>
-                                        {% endif %}
-                                    {% endif %}
-                                    {% if user.es_administrador or user.es_recepcionista %}
-                                        <a href="{% url 'caja' %}?cita_id={{ cita.id }}" class="btn btn-sm btn-secondary">Caja</a>
-                                    {% endif %}
-                                </div>
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-        {% else %}
-            <div class="empty-state" style="padding: 1.5rem;">
-                <p>No hay citas próximas programadas. <a href="{% url 'agendamiento' %}" style="color: var(--primary-color);">Agendar una cita ahora</a>.</p>
-            </div>
-        {% endif %}
     </div>
-{% endif %}
+</section>
 
-<!-- Info Cards -->
-<div class="info-grid">
-    <div class="info-card">
-        <div class="info-icon">🧠</div>
-        <h3>Psicoterapia</h3>
-        <p>Atención psicológica individual y familiar con especialistas certificados.</p>
+{% if user.is_authenticated %}
+{% if tipo_dashboard == 'profesional' %}
+<!-- PANEL PROFESIONAL -->
+<div class="stats-grid">
+    <div class="stat-card">
+        <span class="stat-label">Citas para Hoy</span>
+        <span class="stat-value">{{ citas_hoy_count }}</span>
     </div>
-    <div class="info-card">
-        <div class="info-icon">📹</div>
-        <h3>Telemedicina Dual</h3>
-        <p>Videoconsultas WebRTC seguras con notas clínicas cifradas en tiempo real.</p>
+    <div class="stat-card">
+        <span class="stat-label">Atenciones Registradas</span>
+        <span class="stat-value">{{ atenciones_realizadas_count }}</span>
     </div>
-    <div class="info-card">
-        <div class="info-icon">🔐</div>
-        <h3>Fichas Cifradas</h3>
-        <p>Expedientes médicos protegidos con cifrado simétrico Fernet en reposo.</p>
+    <div class="stat-card">
+        <span class="stat-label">Pendientes de Evolución</span>
+        <span class="stat-value">{{ citas_sin_evolucion|length }}</span>
     </div>
-    <div class="info-card">
-        <div class="info-icon">⏰</div>
-        <h3>Horarios</h3>
-        <p>Lunes a Viernes: 9:00 - 19:00<br>Sábados: 9:00 - 14:00</p>
+    <div class="stat-card">
+        <span class="stat-label">Salas Telemedicina Activas</span>
+        <span class="stat-value">{{ videoconsultas_pendientes|length }}</span>
     </div>
 </div>
 
-<!-- Contact Info -->
+{% if citas_sin_evolucion %}
+<div class="panel-card">
+    <h3>📝 Citas Realizadas Pendientes de Evolución Clínica</h3>
+    <div class="table-wrapper">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Fecha / Hora</th>
+                    <th>Paciente</th>
+                    <th>Modalidad</th>
+                    <th>Acción</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for c in citas_sin_evolucion %}
+                <tr>
+                    <td>
+                        <strong>{{ c.fechaHoraInicio|date:"d/m/Y" }}</strong><br>
+                        <span class="time-pill">{{ c.fechaHoraInicio|date:"H:i" }}</span>
+                    </td>
+                    <td>{{ c.paciente.nombres }} {{ c.paciente.apellidos }} <small class="timeline-meta rut-nowrap">({{ c.paciente.rut }})</small></td>
+                    <td>
+                        {% if c.videoconsulta %}
+                        <span class="status-badge status-confirmada">📹 Telemedicina</span>
+                        {% else %}
+                        <span class="status-badge status-pendiente">🏥 Presencial</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <div class="actions-inline">
+                            {% if c.paciente.ficha_clinica %}
+                            <a href="{% url 'ficha_detalle' c.paciente.ficha_clinica.id %}?cita_id={{ c.id }}" class="btn btn-sm btn-primary btn-pill">
+                                Registrar Evolución
+                            </a>
+                            {% endif %}
+                            {% if c.videoconsulta %}
+                            <a href="{% url 'telemedicina_sala' c.videoconsulta.id %}" class="btn btn-sm btn-secondary btn-pill">
+                                Abrir Sala Dual
+                            </a>
+                            {% endif %}
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+
+{% if videoconsultas_pendientes %}
+<div class="panel-card">
+    <div class="page-header" style="margin-bottom: 1rem; padding-bottom: 0.75rem;">
+        <div>
+            <h3 style="margin-bottom: 0;">📹 Próximas Videoconsultas (Panel Dual)</h3>
+        </div>
+        <a href="{% url 'telemedicina' %}" class="btn btn-sm btn-secondary">Ver Todas las Salas</a>
+    </div>
+    <div class="table-wrapper">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Fecha y Hora</th>
+                    <th>Paciente</th>
+                    <th>Estado Sala</th>
+                    <th>Acceso</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for vc in videoconsultas_pendientes %}
+                <tr>
+                    <td>
+                        <strong>{{ vc.cita.fechaHoraInicio|date:"d/m/Y" }}</strong><br>
+                        <span class="time-pill">{{ vc.cita.fechaHoraInicio|date:"H:i" }}</span>
+                    </td>
+                    <td>{{ vc.cita.paciente.nombres }} {{ vc.cita.paciente.apellidos }}</td>
+                    <td><span class="status-badge status-{{ vc.estadoConexion|lower|slugify }}">{{ vc.estadoConexion }}</span></td>
+                    <td>
+                        <a href="{% url 'telemedicina_sala' vc.id %}" class="btn btn-sm btn-primary btn-pill">Entrar a Sala Dual</a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+
+{% elif tipo_dashboard == 'paciente' %}
+<!-- PANEL PACIENTE -->
+<div class="stats-grid">
+    <div class="stat-card">
+        <span class="stat-label">Citas para Hoy</span>
+        <span class="stat-value">{{ citas_hoy_count }}</span>
+    </div>
+    <div class="stat-card">
+        <span class="stat-label">Sesiones Realizadas</span>
+        <span class="stat-value">{{ sesiones_realizadas_count }}</span>
+    </div>
+    <div class="stat-card">
+        <span class="stat-label">Pagos Pendientes</span>
+        <span class="stat-value">{{ pagos_pendientes_count }}</span>
+    </div>
+</div>
+
+<div class="panel-card">
+    <h3>🗓️ Tu Próxima Consulta</h3>
+    {% if proxima_cita %}
+    <div class="info-kv-list">
+        <div class="info-kv-item">
+            <span class="info-kv-label">Fecha y Horario</span>
+            <span class="info-kv-value">
+                <strong>{{ proxima_cita.fechaHoraInicio|date:"d/m/Y" }}</strong> de {{ proxima_cita.fechaHoraInicio|date:"H:i" }} a {{ proxima_cita.fechaHoraFin|date:"H:i" }}
+            </span>
+        </div>
+        <div class="info-kv-item">
+            <span class="info-kv-label">Especialista</span>
+            <span class="info-kv-value">
+                {{ proxima_cita.profesional.nombres }} {{ proxima_cita.profesional.apellidos }} ({{ proxima_cita.profesional.especialidad }})
+            </span>
+        </div>
+        <div class="info-kv-item">
+            <span class="info-kv-label">Modalidad y Estado</span>
+            <span class="info-kv-value">
+                {% if proxima_cita.videoconsulta %}
+                <span class="status-badge status-confirmada">📹 Telemedicina</span>
+                {% else %}
+                <span class="status-badge status-pendiente">🏥 Presencial (Manuel Antonio Matta 549, Osorno)</span>
+                {% endif %}
+                <span class="status-badge status-{{ proxima_cita.estado|lower|slugify }}">{{ proxima_cita.estado }}</span>
+            </span>
+        </div>
+    </div>
+    <div class="actions-inline" style="margin-top: 1.25rem;">
+        {% if proxima_cita.videoconsulta %}
+        <a href="{% url 'telemedicina_sala' proxima_cita.videoconsulta.id %}" class="btn btn-primary">
+            📹 Entrar a Sala de Videoconsulta
+        </a>
+        {% endif %}
+        <a href="{% url 'agendamiento' %}" class="btn btn-secondary">Gestionar mis Citas</a>
+    </div>
+    {% else %}
+    <div class="empty-state" style="padding: 1.5rem;">
+        <p>No tienes citas futuras agendadas. <a href="{% url 'agendamiento' %}"
+                style="color: var(--primary-color);">Reserva tu próxima hora aquí</a>.</p>
+    </div>
+    {% endif %}
+</div>
+
+<div class="panel-card">
+    <div class="page-header" style="margin-bottom: 1rem; padding-bottom: 0.75rem;">
+        <div>
+            <h3 style="margin-bottom: 0;">💊 Últimas Indicaciones Terapéuticas</h3>
+        </div>
+        {% if ficha_paciente %}
+        <a href="{% url 'ficha_detalle' ficha_paciente.id %}" class="btn btn-sm btn-secondary">Ver Mi Ficha Completa</a>
+        {% endif %}
+    </div>
+
+    {% if ultimas_indicaciones %}
+    <div class="timeline">
+        {% for atencion in ultimas_indicaciones %}
+        <div class="timeline-item">
+            <div class="timeline-header">
+                <div>
+                    <strong>{{ atencion.profesional.nombres }} {{ atencion.profesional.apellidos }}</strong>
+                    <span class="timeline-meta">({{ atencion.profesional.especialidad }})</span>
+                </div>
+                <div class="timeline-meta">{{ atencion.fechaHora|date:"d/m/Y H:i" }}</div>
+            </div>
+            <div class="clinical-block">
+                <div class="clinical-block-title">Diagnóstico</div>
+                <p>{{ atencion.diagnostico|linebreaksbr }}</p>
+            </div>
+            {% if atencion.indicacionesTratamiento %}
+            <div class="clinical-block">
+                <div class="clinical-block-title">Indicaciones para tu Tratamiento</div>
+                <p>{{ atencion.indicacionesTratamiento|linebreaksbr }}</p>
+            </div>
+            {% endif %}
+            <div class="actions-inline no-print" style="margin-top: 0.85rem;">
+                <a href="{% url 'atencion_documento' atencion.id %}?tipo=indicaciones" class="btn btn-sm btn-secondary">
+                    📄 Indicaciones PDF
+                </a>
+                <a href="{% url 'atencion_documento' atencion.id %}?tipo=certificado" class="btn btn-sm btn-secondary">
+                    📜 Certificado Asistencia
+                </a>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-state" style="padding: 1.5rem;">
+        <p>Aún no registras indicaciones clínicas asociadas a tus consultas.</p>
+    </div>
+    {% endif %}
+</div>
+
+{% else %}
+<!-- PANEL ADMINISTRADOR / RECEPCIONISTA -->
+<div class="stats-grid">
+    <div class="stat-card">
+        <span class="stat-label">Citas para Hoy</span>
+        <span class="stat-value">{{ citas_hoy_count }}</span>
+    </div>
+    <div class="stat-card">
+        <span class="stat-label">Pacientes Registrados</span>
+        <span class="stat-value">{{ total_pacientes }}</span>
+    </div>
+    <div class="stat-card">
+        <span class="stat-label">Ingresos Hoy</span>
+        <span class="stat-value">{{ ingresos_hoy|clp }}</span>
+    </div>
+    <div class="stat-card">
+        <span class="stat-label">Ingresos del Mes</span>
+        <span class="stat-value">{{ ingresos_mes|clp }}</span>
+    </div>
+    <div class="stat-card">
+        <span class="stat-label">Citas Pendientes de Cobro</span>
+        <span class="stat-value">{{ citas_sin_pago_count }}</span>
+    </div>
+    {% if total_fichas is not None %}
+    <div class="stat-card">
+        <span class="stat-label">Fichas / Atenciones</span>
+        <span class="stat-value">{{ total_fichas }} / {{ total_atenciones }}</span>
+    </div>
+    {% endif %}
+</div>
+
+{% if citas_hoy_lista %}
+<div class="panel-card">
+    <div class="page-header" style="margin-bottom: 1rem; padding-bottom: 0.75rem;">
+        <div>
+            <h3 style="margin-bottom: 0;">🕒 Agenda de Hoy ({{ citas_hoy_count }})</h3>
+        </div>
+        <a href="{% url 'caja' %}" class="btn btn-sm btn-primary">Ir a Caja y Cobros</a>
+    </div>
+    <div class="table-wrapper">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Horario</th>
+                    <th>Paciente</th>
+                    <th>Profesional</th>
+                    <th>Estado</th>
+                    <th>Gestión Rápida</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for c in citas_hoy_lista %}
+                <tr>
+                    <td><span class="time-pill">{{ c.fechaHoraInicio|date:"H:i" }} – {{ c.fechaHoraFin|date:"H:i" }}</span></td>
+                    <td>
+                        <strong>{{ c.paciente.nombres }} {{ c.paciente.apellidos }}</strong><br>
+                        <small class="timeline-meta rut-nowrap">{{ c.paciente.rut }}</small>
+                    </td>
+                    <td>{{ c.profesional.nombres }} {{ c.profesional.apellidos }}</td>
+                    <td><span class="status-badge status-{{ c.estado|lower|slugify }}">{{ c.estado }}</span></td>
+                    <td>
+                        <div class="actions-inline">
+                            {% if c.estado == 'Agendada' %}
+                            <form method="POST" action="{% url 'cita_cambiar_estado' c.id %}">
+                                {% csrf_token %}
+                                <input type="hidden" name="estado" value="Confirmada">
+                                <button type="submit" class="btn-agenda btn-success">Confirmar</button>
+                            </form>
+                            {% endif %}
+                            <a href="{% url 'caja' %}?cita_id={{ c.id }}" class="btn-agenda btn-secondary">💳 Cobrar</a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+{% endif %}
+
+<!-- Próximas Citas (Vista transversal resumida) -->
+<div class="panel-card">
+    <div class="page-header" style="margin-bottom: 1rem; padding-bottom: 0.75rem;">
+        <div>
+            <h3 style="margin-bottom: 0;">📅 Próximas Citas</h3>
+        </div>
+        <a href="{% url 'agendamiento' %}" class="btn btn-sm btn-secondary">Ver Agenda Completa</a>
+    </div>
+
+    {% if proximas_citas %}
+    <div class="table-wrapper">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Fecha y Hora</th>
+                    <th>Paciente</th>
+                    <th>Profesional</th>
+                    <th>Modalidad</th>
+                    <th>Estado</th>
+                    <th>Acción</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for cita in proximas_citas %}
+                <tr>
+                    <td>
+                        <strong>{{ cita.fechaHoraInicio|date:"d/m/Y" }}</strong><br>
+                        <span class="time-pill">{{ cita.fechaHoraInicio|date:"H:i" }} – {{ cita.fechaHoraFin|date:"H:i" }}</span>
+                    </td>
+                    <td>{{ cita.paciente.nombres }} {{ cita.paciente.apellidos }}</td>
+                    <td>{{ cita.profesional.nombres }} {{ cita.profesional.apellidos }}</td>
+                    <td>
+                        {% if cita.videoconsulta %}
+                        <span class="status-badge status-confirmada">📹 Telemedicina</span>
+                        {% else %}
+                        <span class="status-badge status-pendiente">🏥 Presencial</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="status-badge status-{{ cita.estado|lower|slugify }}">{{ cita.estado }}</span>
+                    </td>
+                    <td>
+                        <div class="actions-inline">
+                            {% if cita.videoconsulta %}
+                            {% if user.es_administrador or user.es_profesional or user.es_paciente %}
+                            <a href="{% url 'telemedicina_sala' cita.videoconsulta.id %}" class="btn-agenda btn-primary">Sala Dual</a>
+                            {% endif %}
+                            {% endif %}
+                            {% if user.es_administrador or user.es_profesional %}
+                            {% if not cita.atencion_clinica and cita.paciente.ficha_clinica %}
+                            <a href="{% url 'ficha_detalle' cita.paciente.ficha_clinica.id %}?cita_id={{ cita.id }}" class="btn-agenda btn-secondary">Ficha</a>
+                            {% endif %}
+                            {% endif %}
+                            {% if user.es_administrador or user.es_recepcionista %}
+                            <a href="{% url 'caja' %}?cita_id={{ cita.id }}" class="btn-agenda btn-secondary">Caja</a>
+                            {% endif %}
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="empty-state" style="padding: 1.5rem;">
+        <p>No hay citas próximas programadas. <a href="{% url 'agendamiento' %}"
+                style="color: var(--primary-color);">Agendar una cita ahora</a>.</p>
+    </div>
+    {% endif %}
+</div>
+{% endif %}
+
+<!-- Pilares de Especialidad & Bienestar -->
+<div class="info-grid">
+    <div class="info-card">
+        <div class="info-icon-ring" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"
+                stroke-linejoin="round">
+                <path
+                    d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96.44 2.5 2.5 0 0 1-2.96-3.08 3 3 0 0 1-.34-5.58 2.5 2.5 0 0 1 1.32-4.24 2.5 2.5 0 0 1 4.44-2.04Z" />
+                <path
+                    d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96.44 2.5 2.5 0 0 0 2.96-3.08 3 3 0 0 0 .34-5.58 2.5 2.5 0 0 0-1.32-4.24 2.5 2.5 0 0 0-4.44-2.04Z" />
+            </svg>
+        </div>
+        <h3>Psicoterapia &amp; Psiquiatría</h3>
+        <p>Atención psicológica y psiquiátrica individual con seguimiento continuo y especialistas certificados.</p>
+    </div>
+    <div class="info-card">
+        <div class="info-icon-ring info-icon-cyan" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"
+                stroke-linejoin="round">
+                <path d="m22 8-6 4 6 4V8Z" />
+                <rect width="14" height="12" x="2" y="6" rx="2" ry="2" />
+            </svg>
+        </div>
+        <h3>Telemedicina Dual</h3>
+        <p>Videoconsultas WebRTC cifradas con sala de espera virtual y registro clínico simultáneo en vivo.</p>
+    </div>
+    <div class="info-card">
+        <div class="info-icon-ring info-icon-rose" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"
+                stroke-linejoin="round">
+                <rect width="18" height="11" x="3" y="11" rx="2" ry="2" />
+                <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+            </svg>
+        </div>
+        <h3>Fichas Cifradas</h3>
+        <p>Expedientes médicos únicos protegidos con cifrado simétrico Fernet en reposo y acceso RBAC.</p>
+    </div>
+    <div class="info-card">
+        <div class="info-icon-ring info-icon-amber" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"
+                stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10" />
+                <polyline points="12 6 12 12 16 14" />
+            </svg>
+        </div>
+        <h3>Horarios de Atención</h3>
+        <p>Lunes a Viernes: 09:00 &ndash; 19:00 hrs<br>Sábados: 09:00 &ndash; 14:00 hrs</p>
+    </div>
+</div>
+
+<!-- Contacto Clínico -->
 <div class="contact-section">
     <div class="contact-card">
-        <h3>¿Necesitas ayuda?</h3>
-        <p>Nuestro equipo está aquí para apoyarte</p>
-        <div class="contact-info">
-            <p>📍 Manuel Antonio Matta 549, Osorno</p>
-            <p>📞 +56 64 2 123 456</p>
-            <p>✉️ contacto@centronodo.cl</p>
+        <div class="contact-card-copy">
+            <span class="floating-widget-kicker">Atención Presencial &amp; Remota</span>
+            <h3>¿Necesitas asistencia o coordinación clínica?</h3>
+            <p>Nuestro equipo administrativo y de especialistas está disponible para orientarte en tu proceso de
+                bienestar.</p>
+        </div>
+        <div class="contact-pills">
+            <span class="contact-pill-item">📍 Manuel Antonio Matta 549, Osorno</span>
+            <span class="contact-pill-item">📞 +56 64 2 123 456</span>
+            <span class="contact-pill-item">✉️ contacto@centronodo.cl</span>
         </div>
     </div>
 </div>
