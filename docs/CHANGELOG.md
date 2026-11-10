@@ -183,14 +183,24 @@
 - **Activos Visuales y Contraste (`static/img/`, `templates/login.html`, `templates/caja/index.html`, `templates/telemedicina_sala.html`):**
   - Login showcase dividido (`.auth-showcase-grid`) con onda biométrica animada, variables de contraste adaptativas (`--badge-success-text`, `--badge-danger-text`) y preservación de reglas de impresión.
 
+### 17. Bitácora de Auditoría Clínica (`AuditLog`) y Páginas de Error Personalizadas (`403`, `404`, `500`)
+- **Bitácora de Auditoría Clínica Inmutable (`clinica/models.py`, `clinica/audit.py`, `clinica/migrations/0006_auditlog.py`):**
+  - Nuevo modelo `AuditLog` (`db_table='audit_log'`) con snapshot histórico de usuario, rol, acción, módulo, entidad/ID afectado, descripción sanitizada, resultado (`OK`, `DENEGADO`, `FALLIDO`), `ipOrigen` validada (`TRUST_X_FORWARDED_FOR=False` por defecto en `core/settings.py` para evitar IP spoofing), `userAgent` y `datosExtra` JSON.
+  - Instrumentación transversal en `clinica/views.py` y `clinica/decorators.py` cubriendo autenticación (`LOGIN_EXITOSO`, `LOGIN_FALLIDO`, `LOGIN_BLOQUEADO`, `LOGOUT`), lectura y edición de expedientes cifrados (`VER_FICHA_CLINICA`, `EDITAR_ANTECEDENTES_FICHA`, `CREAR_ATENCION_CLINICA`, `EMITIR_DOCUMENTO_CLINICO` sin filtrar textos clínicos confidenciales), pacientes, agendamiento/bloqueos, telemedicina, movimientos de caja (`REGISTRAR_PAGO`, `CONFIRMAR_PAGO`, `ANULAR_PAGO`, comprobantes, CSV/liquidación) y eventos `ACCESO_DENEGADO`.
+  - Panel web exclusivo de **Administrador** (`/auditoria/` y `/auditoria/exportar/`) en `templates/auditoria.html` con 5 KPIs, filtros acotados, paginación (25 filas por página) y exportación CSV sanitizada contra `CWE-1236`, además de acceso de solo lectura en `AuditLogAdmin` (`clinica/admin.py`).
+- **Páginas de Error Clinical Glassmorphism (`templates/403.html`, `templates/404.html`, `templates/500.html`, `core/urls.py`, `static/css/style.css`):**
+  - Implementados `handler403`, `handler404` y `handler500` con el lenguaje visual Glassmorphism y soporte Dual Dark/Light.
+  - `error_500_view` renderiza `templates/500.html` de forma autónoma sin `context_processors` ni acceso a BD/sesión (con CSS crítico de respaldo) para resistir fallos en cascada.
+  - Rutas `/preview-error/403/`, `/preview-error/404/` y `/preview-error/500/` disponibles únicamente cuando `DEBUG=True`.
+
 
 ---
 
 ## 🔍 Verificación Realizada
-- **Migraciones:** Todas las migraciones (`0001` a `0005` de `clinica` + `admin`, `auth`, `contenttypes`, `sessions`) aplicadas exitosamente y validadas con `makemigrations --check --dry-run` (**Sin cambios pendientes**).
+- **Migraciones:** Todas las migraciones (`0001` a `0006` de `clinica` + `admin`, `auth`, `contenttypes`, `sessions`) aplicadas exitosamente y validadas con `makemigrations --check --dry-run` (**Sin cambios pendientes**).
 - **Chequeo del sistema:** `python manage.py check` (**0 issues**).
 - **Pruebas Automatizadas:**
   - Bloqueo de usuarios anónimos en rutas privadas (redirección a login), inicio de sesión con `username` o `email`, bloqueo de cuentas inactivas y cierre de sesión protegido vía POST: **OK**.
-  - Suite completa `python manage.py test clinica -v 2` (**28 pruebas** cubriendo las **7 Fases** y el conjunto `HardeningSeguridadLimitesTests`: RUT Módulo 11, Pacientes sin duplicados ni caracteres inválidos, límites de caracteres en todos los formularios, RBAC estricto y aislamiento cruzado entre pacientes, Agendamiento anti-colisiones atómico, Cifrado Fernet en BD cruda, Dashboards por rol, Telemedicina Dual/AJAX/Sala de Espera WebRTC HTTP 409 y endurecimiento SDP/ICE, Caja/Liquidaciones/Anulación/Comprobante/Reporte PDF/CSV anti-inyección de fórmulas, Documentos Clínicos PDF, Notificaciones/Recordatorios automáticos/manuales/`--dry-run`, fuzzing GET/SQLi sin HTTP 500 y cabeceras/métodos HTTP seguros): **OK**.
+  - Suite completa `python manage.py test clinica -v 2` (**31 pruebas** cubriendo las **7 Fases**, el conjunto `HardeningSeguridadLimitesTests` y `AuditoriaClinicaYErroresTests`: RUT Módulo 11, Pacientes sin duplicados ni caracteres inválidos, límites de caracteres en todos los formularios, RBAC estricto y aislamiento cruzado entre pacientes, Agendamiento anti-colisiones atómico, Cifrado Fernet en BD cruda, Dashboards por rol, Telemedicina Dual/AJAX/Sala de Espera WebRTC HTTP 409 y endurecimiento SDP/ICE, Caja/Liquidaciones/Anulación/Comprobante/Reporte PDF/CSV anti-inyección de fórmulas, Documentos Clínicos PDF, Notificaciones/Recordatorios automáticos/manuales/`--dry-run`, Bitácora `AuditLog` inmutable/RBAC/sin fuga clínica, páginas `403`/`404`/`500` Glassmorphism con `DEBUG=False`, fuzzing GET/SQLi sin HTTP 500 y cabeceras/métodos HTTP seguros): **OK**.
 
 

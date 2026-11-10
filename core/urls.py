@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.contrib import admin
 from django.urls import path
 from django.contrib.auth import views as auth_views
@@ -30,6 +31,11 @@ from clinica.views import (
     atencion_documento_view,
     cita_enviar_recordatorio_view,
     caja_reporte_liquidacion_view,
+    auditoria_view,
+    auditoria_exportar_csv_view,
+    error_403_view,
+    error_404_view,
+    error_500_view,
 )
 from clinica.forms import CustomPasswordResetForm, CustomSetPasswordForm
 
@@ -94,4 +100,19 @@ urlpatterns = [
     path('caja/comprobante/<int:pago_id>/', pago_comprobante_view, name='pago_comprobante'),
     path('caja/exportar/', caja_exportar_csv_view, name='caja_exportar_csv'),
     path('caja/reporte-liquidacion/', caja_reporte_liquidacion_view, name='caja_reporte_liquidacion'),
+
+    # Bitácora de Auditoría Clínica (Solo Administrador)
+    path('auditoria/', auditoria_view, name='auditoria'),
+    path('auditoria/exportar/', auditoria_exportar_csv_view, name='auditoria_exportar_csv'),
 ]
+
+handler403 = 'clinica.views.error_403_view'
+handler404 = 'clinica.views.error_404_view'
+handler500 = 'clinica.views.error_500_view'
+
+if settings.DEBUG:
+    urlpatterns += [
+        path('preview-error/403/', error_403_view, name='preview_error_403'),
+        path('preview-error/404/', error_404_view, name='preview_error_404'),
+        path('preview-error/500/', error_500_view, name='preview_error_500'),
+    ]

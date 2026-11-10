@@ -1,5 +1,6 @@
 import csv
 import json
+import re
 import uuid
 from datetime import datetime, time
 from decimal import Decimal
@@ -8,9 +9,11 @@ from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.core.cache import cache
+from django.core.paginator import Paginator
 from django.db import transaction
 from django.db.models import Q, Count, Sum
-from django.http import JsonResponse, HttpResponse
+from django.http import JsonResponse, HttpResponse, HttpResponseServerError
+from django.template.loader import get_template
 from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
@@ -27,6 +30,7 @@ from .models import (
     FichaClinica,
     AtencionClinica,
     NotificacionCita,
+    AuditLog,
 )
 from .forms import (
     LoginForm,
@@ -37,6 +41,7 @@ from .forms import (
     BloqueoHorarioForm,
     PagoForm,
 )
+from .audit import registrar_auditoria, MODULOS_AUDITORIA, RESULTADOS_AUDITORIA
 from .decorators import rol_requerido
 from .notifications import enviar_notificacion_cita
 from .utils import limpiar_rut, sanitizar_celda_csv, parse_positive_int
@@ -67,10 +72,30 @@ def login_view(request):
 
             if user is not None:
                 if not user.is_active:
+                    registrar_auditoria(
+                        request,
+                        usuario=user,
+                        accion='LOGIN_BLOQUEADO',
+                        modulo='Autenticación',
+                        entidad='Usuario',
+                        entidad_id=user.id,
+                        descripcion=f"Intento de inicio de sesión con cuenta inactiva ({user.username})",
+                        resultado='DENEGADO',
+                    )
                     messages.error(request, "Esta cuenta de usuario se encuentra inactiva. Contacte a soporte o administración.")
                     return render(request, 'login.html', {'form': form, 'next': next_url})
 
                 login(request, user)
+                registrar_auditoria(
+                    request,
+                    usuario=user,
+                    accion='LOGIN_EXITOSO',
+                    modulo='Autenticación',
+                    entidad='Usuario',
+                    entidad_id=user.id,
+                    descripcion=f"Inicio de sesión exitoso ({user.username})",
+                    resultado='OK',
+                )
 
                 if not remember_me:
                     request.session.set_expiry(0)
@@ -89,6 +114,17 @@ def login_view(request):
                     return redirect(next_url)
                 return redirect('dashboard')
             else:
+                registrar_auditoria(
+                    request,
+                    usuario=None,
+                    username_fallback=login_id,
+                    accion='LOGIN_FALLIDO',
+                    modulo='Autenticación',
+                    entidad='Usuario',
+                    descripcion=f"Intento de inicio de sesión fallido para '{login_id[:60]}'",
+                    resultado='FALLIDO',
+                    datos_extra={'identificador': login_id[:60]},
+                )
                 messages.error(request, "Credenciales incorrectas. Verifique su usuario/correo y contraseña.")
     else:
         form = LoginForm()
@@ -106,6 +142,15 @@ def logout_view(request):
     y redirige al login con mensaje explicativo.
     """
     if request.user.is_authenticated:
+        registrar_auditoria(
+            request,
+            accion='LOGOUT',
+            modulo='Autenticación',
+            entidad='Usuario',
+            entidad_id=request.user.id,
+            descripcion=f"Cierre de sesión seguro de {request.user.username}",
+            resultado='OK',
+        )
         logout(request)
         messages.info(request, "Has cerrado tu sesión de forma segura.")
     return redirect('login')
@@ -300,6 +345,15 @@ def paciente_crear_view(request):
                 paciente.save()
                 # Cada paciente nace con su Ficha Clínica única (1 a 1)
                 FichaClinica.objects.get_or_create(paciente=paciente)
+                registrar_auditoria(
+                    request,
+                    accion='CREAR_PACIENTE',
+                    modulo='Pacientes',
+                    entidad='Paciente',
+                    entidad_id=paciente.id,
+                    descripcion=f"Registro de paciente {paciente.nombres} {paciente.apellidos} ({paciente.rut})",
+                    datos_extra={'cuenta_web': bool(paciente.usuario_id)},
+                )
 
             messages.success(
                 request,
@@ -333,6 +387,14 @@ def paciente_editar_view(request, paciente_id):
                     paciente.usuario.first_name = paciente.nombres
                     paciente.usuario.last_name = paciente.apellidos
                     paciente.usuario.save(update_fields=['first_name', 'last_name'])
+                registrar_auditoria(
+                    request,
+                    accion='EDITAR_PACIENTE',
+                    modulo='Pacientes',
+                    entidad='Paciente',
+                    entidad_id=paciente.id,
+                    descripcion=f"Actualización de datos del paciente {paciente.nombres} {paciente.apellidos} ({paciente.rut})",
+                )
 
             messages.success(request, f"Datos de {paciente.nombres} {paciente.apellidos} actualizados.")
             return redirect('paciente_detalle', paciente_id=paciente.id)
@@ -356,9 +418,26 @@ def paciente_detalle_view(request, paciente_id):
 
     es_dueno = request.user.es_paciente and paciente.usuario_id == request.user.id
     if not (request.user.es_staff_clinico or es_dueno):
+        registrar_auditoria(
+            request,
+            accion='ACCESO_DENEGADO',
+            modulo='Pacientes',
+            entidad='Paciente',
+            entidad_id=paciente.id,
+            descripcion=f"Intento no autorizado de acceso al perfil del Paciente #{paciente.id}",
+            resultado='DENEGADO',
+        )
         messages.warning(request, "No tienes permiso para ver la información de este paciente.")
         return redirect('dashboard')
 
+    registrar_auditoria(
+        request,
+        accion='VER_PACIENTE',
+        modulo='Pacientes',
+        entidad='Paciente',
+        entidad_id=paciente.id,
+        descripcion=f"Consulta de perfil de {paciente.nombres} {paciente.apellidos} ({paciente.rut})",
+    )
     ficha, _ = FichaClinica.objects.get_or_create(paciente=paciente)
     citas = paciente.citas.select_related('profesional', 'videoconsulta', 'atencion_clinica').order_by('-fechaHoraInicio')
 
@@ -387,6 +466,14 @@ def fichas_lista_view(request):
         return redirect('ficha_detalle', ficha_id=ficha.id)
 
     if not (request.user.es_administrador or request.user.es_profesional):
+        registrar_auditoria(
+            request,
+            accion='ACCESO_DENEGADO',
+            modulo='Fichas Clínicas',
+            entidad='FichaClinica',
+            descripcion="Intento no autorizado de acceso al listado general de fichas clínicas",
+            resultado='DENEGADO',
+        )
         messages.warning(request, "El acceso a fichas clínicas está restringido al equipo clínico.")
         return redirect('dashboard')
 
@@ -428,8 +515,27 @@ def ficha_detalle_view(request, ficha_id):
     es_clinico = request.user.es_administrador or request.user.es_profesional
 
     if not (es_clinico or es_dueno):
+        registrar_auditoria(
+            request,
+            accion='ACCESO_DENEGADO',
+            modulo='Fichas Clínicas',
+            entidad='FichaClinica',
+            entidad_id=ficha.id,
+            descripcion=f"Intento no autorizado de acceso a Ficha Clínica #{ficha.id} ({ficha.paciente.rut})",
+            resultado='DENEGADO',
+        )
         messages.warning(request, "No tienes autorización para acceder a esta ficha clínica.")
         return redirect('dashboard')
+
+    registrar_auditoria(
+        request,
+        accion='VER_FICHA_CLINICA',
+        modulo='Fichas Clínicas',
+        entidad='FichaClinica',
+        entidad_id=ficha.id,
+        descripcion=f"Lectura de Ficha Clínica #{ficha.id} — {ficha.paciente.nombres} {ficha.paciente.apellidos} ({ficha.paciente.rut})",
+        datos_extra={'paciente_id': ficha.paciente_id, 'acceso_clinico': es_clinico},
+    )
 
     atenciones = ficha.atenciones.select_related('profesional', 'cita').order_by('-fechaHora')
 
@@ -476,6 +582,15 @@ def ficha_editar_antecedentes_view(request, ficha_id):
     form = FichaClinicaForm(request.POST, instance=ficha)
     if form.is_valid():
         form.save()
+        registrar_auditoria(
+            request,
+            accion='EDITAR_ANTECEDENTES_FICHA',
+            modulo='Fichas Clínicas',
+            entidad='FichaClinica',
+            entidad_id=ficha.id,
+            descripcion=f"Actualización de antecedentes/alergias en Ficha Clínica #{ficha.id} ({ficha.paciente.rut})",
+            datos_extra={'grupo_sanguineo': ficha.grupoSanguineo or ''},
+        )
         messages.success(request, "Antecedentes clínicos actualizados correctamente.")
     else:
         for err_list in form.errors.values():
@@ -516,6 +631,16 @@ def atencion_crear_view(request, ficha_id):
                 atencion.cita.estado = 'Realizada'
                 atencion.cita.save(update_fields=['estado'])
 
+            registrar_auditoria(
+                request,
+                accion='CREAR_ATENCION_CLINICA',
+                modulo='Fichas Clínicas',
+                entidad='AtencionClinica',
+                entidad_id=atencion.id,
+                descripcion=f"Registro de Atención Clínica #{atencion.id} en Ficha #{ficha.id} ({ficha.paciente.rut})",
+                datos_extra={'ficha_id': ficha.id, 'cita_id': atencion.cita_id, 'profesional_id': atencion.profesional_id},
+            )
+
         messages.success(request, "Atención clínica registrada exitosamente en la ficha del paciente.")
         return redirect('ficha_detalle', ficha_id=ficha.id)
 
@@ -555,12 +680,31 @@ def atencion_documento_view(request, atencion_id):
     es_dueno = request.user.es_paciente and paciente.usuario_id == request.user.id
 
     if not (es_clinico or es_dueno):
+        registrar_auditoria(
+            request,
+            accion='ACCESO_DENEGADO',
+            modulo='Fichas Clínicas',
+            entidad='AtencionClinica',
+            entidad_id=atencion.id,
+            descripcion=f"Intento no autorizado de emitir documento para Atención #{atencion.id}",
+            resultado='DENEGADO',
+        )
         messages.warning(request, "No tienes autorización para emitir este documento clínico.")
         return redirect('dashboard')
 
     tipo_doc = request.GET.get('tipo', 'indicaciones').strip().lower()
     if tipo_doc not in ['indicaciones', 'certificado']:
         tipo_doc = 'indicaciones'
+
+    registrar_auditoria(
+        request,
+        accion='EMITIR_DOCUMENTO_CLINICO',
+        modulo='Fichas Clínicas',
+        entidad='AtencionClinica',
+        entidad_id=atencion.id,
+        descripcion=f"Emisión de documento '{tipo_doc}' para Atención #{atencion.id} ({paciente.rut})",
+        datos_extra={'tipo_doc': tipo_doc, 'ficha_id': atencion.fichaClinica_id, 'paciente_id': paciente.id},
+    )
 
     return render(request, 'fichas/documento_atencion.html', {
         'atencion': atencion,
@@ -639,6 +783,16 @@ def agendamiento_view(request):
                         urlSalaWebRTC=f"sala-{uuid.uuid4().hex[:10]}",
                         estadoConexion='Pendiente',
                     )
+
+                registrar_auditoria(
+                    request,
+                    accion='AGENDAR_CITA',
+                    modulo='Agendamiento',
+                    entidad='Cita',
+                    entidad_id=cita.id,
+                    descripcion=f"Cita #{cita.id} agendada para {paciente.nombres} {paciente.apellidos} con {profesional.nombres} {profesional.apellidos}",
+                    datos_extra={'telemedicina': cita_form.cleaned_data.get('es_telemedicina', False)},
+                )
 
             notif = enviar_notificacion_cita(cita, tipo='Agendamiento', notificar_profesional=True)
             fecha_str = timezone.localtime(cita.fechaHoraInicio).strftime('%d/%m/%Y a las %H:%M')
@@ -763,6 +917,15 @@ def cita_cambiar_estado_view(request, cita_id):
             autorizado = True
 
     if not autorizado:
+        registrar_auditoria(
+            request,
+            accion='ACCESO_DENEGADO',
+            modulo='Agendamiento',
+            entidad='Cita',
+            entidad_id=cita.id,
+            descripcion=f"Intento no autorizado de cambiar Cita #{cita.id} a '{nuevo_estado}'",
+            resultado='DENEGADO',
+        )
         messages.warning(request, "No tienes permisos para realizar esta acción sobre la cita.")
         return redirect('agendamiento')
 
@@ -770,8 +933,19 @@ def cita_cambiar_estado_view(request, cita_id):
         messages.warning(request, "Una cita ya realizada no puede revertirse a un estado previo.")
         return redirect('agendamiento')
 
+    estado_anterior = cita.estado
     cita.estado = nuevo_estado
     cita.save(update_fields=['estado'])
+
+    registrar_auditoria(
+        request,
+        accion='CAMBIAR_ESTADO_CITA',
+        modulo='Agendamiento',
+        entidad='Cita',
+        entidad_id=cita.id,
+        descripcion=f"Cambio de estado en Cita #{cita.id}: {estado_anterior} -> {nuevo_estado}",
+        datos_extra={'estado_anterior': estado_anterior, 'estado_nuevo': nuevo_estado},
+    )
 
     if nuevo_estado == 'Confirmada':
         enviar_notificacion_cita(cita, tipo='Confirmación', notificar_profesional=False)
@@ -805,6 +979,14 @@ def cita_enviar_recordatorio_view(request, cita_id):
 
     res = enviar_notificacion_cita(cita, tipo='Recordatorio', notificar_profesional=False)
     if res['enviado_paciente']:
+        registrar_auditoria(
+            request,
+            accion='ENVIAR_RECORDATORIO_CITA',
+            modulo='Agendamiento',
+            entidad='Cita',
+            entidad_id=cita.id,
+            descripcion=f"Envío manual de recordatorio de Cita #{cita.id} a {res['email_paciente']}",
+        )
         messages.success(request, f"Recordatorio enviado a {res['email_paciente']} para la Cita #{cita.id}.")
     elif not res['email_paciente']:
         messages.warning(
@@ -852,12 +1034,20 @@ def bloqueo_crear_view(request):
                 messages.error(request, "El tramo horario seleccionado colisiona con una cita o bloqueo activo.")
                 return redirect('agendamiento')
 
-            BloqueoHorario.objects.create(
+            bloqueo = BloqueoHorario.objects.create(
                 profesional=profesional,
                 fechaHoraInicio=inicio,
                 fechaHoraFin=fin,
                 motivo=form.cleaned_data.get('motivo') or 'Bloqueo de agenda',
                 estado='Activo',
+            )
+            registrar_auditoria(
+                request,
+                accion='CREAR_BLOQUEO',
+                modulo='Agendamiento',
+                entidad='BloqueoHorario',
+                entidad_id=bloqueo.id,
+                descripcion=f"Bloqueo horario #{bloqueo.id} creado para {profesional.nombres} {profesional.apellidos}",
             )
         messages.success(
             request,
@@ -885,11 +1075,28 @@ def bloqueo_eliminar_view(request, bloqueo_id):
 
     if request.user.es_profesional and hasattr(request.user, 'profesional'):
         if bloqueo.profesional_id != request.user.profesional.id:
+            registrar_auditoria(
+                request,
+                accion='ACCESO_DENEGADO',
+                modulo='Agendamiento',
+                entidad='BloqueoHorario',
+                entidad_id=bloqueo.id,
+                descripcion=f"Intento no autorizado de eliminar BloqueoHorario #{bloqueo.id}",
+                resultado='DENEGADO',
+            )
             messages.warning(request, "Solo puedes eliminar tus propios bloqueos horarios.")
             return redirect('agendamiento')
 
     bloqueo.estado = 'Inactivo'
     bloqueo.save(update_fields=['estado'])
+    registrar_auditoria(
+        request,
+        accion='ELIMINAR_BLOQUEO',
+        modulo='Agendamiento',
+        entidad='BloqueoHorario',
+        entidad_id=bloqueo.id,
+        descripcion=f"Bloqueo horario #{bloqueo.id} desactivado",
+    )
     messages.info(request, "Bloqueo horario eliminado correctamente.")
 
     return redirect('agendamiento')
@@ -1003,6 +1210,15 @@ def telemedicina_sala_view(request, videoconsulta_id):
         pk=videoconsulta_id
     )
     if not _usuario_autorizado_sala(request.user, videoconsulta):
+        registrar_auditoria(
+            request,
+            accion='ACCESO_DENEGADO',
+            modulo='Telemedicina',
+            entidad='Videoconsulta',
+            entidad_id=videoconsulta.id,
+            descripcion=f"Intento no autorizado de ingreso a sala de Videoconsulta #{videoconsulta.id}",
+            resultado='DENEGADO',
+        )
         messages.warning(request, "No tienes autorización para ingresar a esta sala de videoconsulta.")
         return redirect('telemedicina')
 
@@ -1024,6 +1240,15 @@ def telemedicina_sala_view(request, videoconsulta_id):
     if request.method == 'POST':
         is_ajax = request.headers.get('X-Requested-With') == 'XMLHttpRequest'
         if not es_clinico:
+            registrar_auditoria(
+                request,
+                accion='ACCESO_DENEGADO',
+                modulo='Telemedicina',
+                entidad='Videoconsulta',
+                entidad_id=videoconsulta.id,
+                descripcion=f"Intento no autorizado de editar notas clínicas en Videoconsulta #{videoconsulta.id}",
+                resultado='DENEGADO',
+            )
             if is_ajax:
                 return JsonResponse({'ok': False, 'error': 'Sin permiso para editar notas clínicas.'}, status=403)
             messages.warning(request, "Solo el equipo clínico puede registrar evoluciones.")
@@ -1055,6 +1280,16 @@ def telemedicina_sala_view(request, videoconsulta_id):
                     cita.estado = 'En atención'
                     cita.save(update_fields=['estado'])
 
+                registrar_auditoria(
+                    request,
+                    accion='GUARDAR_NOTA_TELEMEDICINA',
+                    modulo='Telemedicina',
+                    entidad='AtencionClinica',
+                    entidad_id=atencion.id,
+                    descripcion=f"Nota clínica en vivo ({accion}) guardada en Videoconsulta #{videoconsulta.id} (Ficha #{ficha.id})",
+                    datos_extra={'videoconsulta_id': videoconsulta.id, 'ficha_id': ficha.id, 'accion_nota': accion},
+                )
+
             if is_ajax:
                 return JsonResponse({
                     'ok': True,
@@ -1082,6 +1317,17 @@ def telemedicina_sala_view(request, videoconsulta_id):
         cita=cita
     ).order_by('-fechaHora')[:4]
 
+    if request.method == 'GET':
+        registrar_auditoria(
+            request,
+            accion='INGRESAR_VIDEOCONSULTA',
+            modulo='Telemedicina',
+            entidad='Videoconsulta',
+            entidad_id=videoconsulta.id,
+            descripcion=f"Ingreso a sala de Videoconsulta #{videoconsulta.id} (Cita #{cita.id})",
+            datos_extra={'estado_sala': videoconsulta.estadoConexion, 'rol_sala': 'host' if es_clinico else 'guest'},
+        )
+
     return render(request, 'telemedicina_sala.html', {
         'videoconsulta': videoconsulta,
         'cita': cita,
@@ -1104,6 +1350,15 @@ def telemedicina_estado_view(request, videoconsulta_id):
     """
     videoconsulta = get_object_or_404(Videoconsulta.objects.select_related('cita'), pk=videoconsulta_id)
     if not _usuario_autorizado_sala(request.user, videoconsulta):
+        registrar_auditoria(
+            request,
+            accion='ACCESO_DENEGADO',
+            modulo='Telemedicina',
+            entidad='Videoconsulta',
+            entidad_id=videoconsulta.id,
+            descripcion=f"Intento no autorizado de cambiar estado de Videoconsulta #{videoconsulta.id}",
+            resultado='DENEGADO',
+        )
         return JsonResponse({'ok': False, 'error': 'No autorizado'}, status=403)
 
     if videoconsulta.cita.estado == 'Cancelada':
@@ -1125,10 +1380,30 @@ def telemedicina_estado_view(request, videoconsulta_id):
     # Solo el profesional o administrador puede admitir ('En curso') o finalizar
     es_clinico = request.user.es_administrador or request.user.es_profesional
     if nuevo_estado in ['En curso', 'Finalizada'] and not es_clinico:
+        registrar_auditoria(
+            request,
+            accion='ACCESO_DENEGADO',
+            modulo='Telemedicina',
+            entidad='Videoconsulta',
+            entidad_id=videoconsulta.id,
+            descripcion=f"Intento de paciente de cambiar sala #{videoconsulta.id} a '{nuevo_estado}'",
+            resultado='DENEGADO',
+        )
         return JsonResponse({'ok': False, 'error': 'Solo el profesional puede iniciar o finalizar la sesión'}, status=403)
 
+    estado_anterior = videoconsulta.estadoConexion
     videoconsulta.estadoConexion = nuevo_estado
     videoconsulta.save(update_fields=['estadoConexion'])
+
+    registrar_auditoria(
+        request,
+        accion='CAMBIAR_ESTADO_VIDEOCONSULTA',
+        modulo='Telemedicina',
+        entidad='Videoconsulta',
+        entidad_id=videoconsulta.id,
+        descripcion=f"Sala Videoconsulta #{videoconsulta.id}: {estado_anterior} -> {nuevo_estado}",
+        datos_extra={'estado_anterior': estado_anterior, 'estado_nuevo': nuevo_estado},
+    )
 
     if nuevo_estado == 'En curso' and videoconsulta.cita.estado in ['Agendada', 'Confirmada']:
         videoconsulta.cita.estado = 'En atención'
@@ -1154,6 +1429,15 @@ def telemedicina_senal_view(request, videoconsulta_id):
     """
     videoconsulta = get_object_or_404(Videoconsulta.objects.select_related('cita'), pk=videoconsulta_id)
     if not _usuario_autorizado_sala(request.user, videoconsulta):
+        registrar_auditoria(
+            request,
+            accion='ACCESO_DENEGADO',
+            modulo='Telemedicina',
+            entidad='Videoconsulta',
+            entidad_id=videoconsulta.id,
+            descripcion=f"Intento no autorizado en señalización WebRTC de sala #{videoconsulta.id}",
+            resultado='DENEGADO',
+        )
         return JsonResponse({'ok': False, 'error': 'No autorizado'}, status=403)
 
     if videoconsulta.cita.estado == 'Cancelada':
@@ -1295,6 +1579,14 @@ def caja_view(request):
 
     if request.method == 'POST':
         if not puede_cobrar:
+            registrar_auditoria(
+                request,
+                accion='ACCESO_DENEGADO',
+                modulo='Caja y Pagos',
+                entidad='Pago',
+                descripcion="Intento no autorizado de registrar un pago en caja",
+                resultado='DENEGADO',
+            )
             messages.warning(request, "Solo administración y recepción pueden registrar pagos en caja.")
             return redirect('caja')
 
@@ -1317,6 +1609,22 @@ def caja_view(request):
                     correlativo = ultimo_id + 1
                     pago.numeroComprobante = f"CMP-{fecha_tag}-{correlativo:04d}"
                 pago.save()
+
+                registrar_auditoria(
+                    request,
+                    accion='REGISTRAR_PAGO',
+                    modulo='Caja y Pagos',
+                    entidad='Pago',
+                    entidad_id=pago.id,
+                    descripcion=f"Registro de pago #{pago.id} (${int(pago.monto):,}) — {pago.numeroComprobante} [{pago.estado}]",
+                    datos_extra={
+                        'cita_id': cita_locked.id,
+                        'monto': int(pago.monto),
+                        'estado': pago.estado,
+                        'metodo': pago.metodoPago,
+                        'comprobante': pago.numeroComprobante,
+                    },
+                )
 
             messages.success(
                 request,
@@ -1449,10 +1757,30 @@ def pago_cambiar_estado_view(request, pago_id):
             if nuevo_estado == 'Pagado' and pago_locked.cita.pagos.filter(estado='Pagado').exclude(pk=pago_locked.pk).exists():
                 messages.error(request, f"La Cita #{pago_locked.cita_id} ya tiene otro pago confirmado.")
                 return redirect('caja')
+            estado_anterior = pago_locked.estado
             pago_locked.estado = nuevo_estado
             if nuevo_estado == 'Pagado':
                 pago_locked.fechaPago = timezone.now()
             pago_locked.save(update_fields=['estado', 'fechaPago'])
+
+            accion_pago = (
+                'ANULAR_PAGO' if nuevo_estado == 'Anulado'
+                else ('CONFIRMAR_PAGO' if nuevo_estado == 'Pagado' else 'ACTUALIZAR_PAGO')
+            )
+            registrar_auditoria(
+                request,
+                accion=accion_pago,
+                modulo='Caja y Pagos',
+                entidad='Pago',
+                entidad_id=pago_locked.id,
+                descripcion=f"{accion_pago.replace('_', ' ').title()} #{pago_locked.id} ({pago_locked.numeroComprobante or 'S/N'}): {estado_anterior} -> {nuevo_estado}",
+                datos_extra={
+                    'estado_anterior': estado_anterior,
+                    'estado_nuevo': nuevo_estado,
+                    'monto': int(pago_locked.monto),
+                    'comprobante': pago_locked.numeroComprobante or '',
+                },
+            )
         messages.success(request, f"Pago #{pago.id} actualizado a '{nuevo_estado}'.")
     else:
         messages.error(request, "Estado de pago inválido.")
@@ -1476,9 +1804,26 @@ def pago_comprobante_view(request, pago_id):
         or (user.es_paciente and hasattr(user, 'paciente') and pago.cita.paciente_id == user.paciente.id)
     )
     if not autorizado:
+        registrar_auditoria(
+            request,
+            accion='ACCESO_DENEGADO',
+            modulo='Caja y Pagos',
+            entidad='Pago',
+            entidad_id=pago.id,
+            descripcion=f"Intento no autorizado de visualizar comprobante de Pago #{pago.id}",
+            resultado='DENEGADO',
+        )
         messages.warning(request, "No tienes permiso para ver este comprobante.")
         return redirect('dashboard')
 
+    registrar_auditoria(
+        request,
+        accion='VER_COMPROBANTE_PAGO',
+        modulo='Caja y Pagos',
+        entidad='Pago',
+        entidad_id=pago.id,
+        descripcion=f"Emisión/consulta de comprobante {pago.numeroComprobante or f'#{pago.id}'}",
+    )
     return render(request, 'caja/comprobante.html', {'pago': pago})
 
 
@@ -1495,6 +1840,15 @@ def caja_exportar_csv_view(request):
         pagos = pagos.filter(cita__profesional=user.profesional) if hasattr(user, 'profesional') else Pago.objects.none()
 
     pagos, _, _, _ = _aplicar_filtros_caja(request, pagos)
+
+    registrar_auditoria(
+        request,
+        accion='EXPORTAR_CAJA_CSV',
+        modulo='Caja y Pagos',
+        entidad='Pago',
+        descripcion="Exportación CSV de movimientos de caja",
+        datos_extra={'cantidad_registros': pagos.count()},
+    )
 
     response = HttpResponse(content_type='text/csv; charset=utf-8-sig')
     response['Content-Disposition'] = f'attachment; filename="caja_centro_nodo_{timezone.localdate()}.csv"'
@@ -1576,6 +1930,15 @@ def caja_reporte_liquidacion_view(request):
 
     liquidaciones.sort(key=lambda x: x['monto_bruto'], reverse=True)
 
+    registrar_auditoria(
+        request,
+        accion='VER_REPORTE_LIQUIDACION',
+        modulo='Caja y Pagos',
+        entidad='Pago',
+        descripcion=f"Consulta/impresión de reporte de liquidación de honorarios (comisión {comision_pct}%)",
+        datos_extra={'comision_pct': comision_pct, 'total_recaudado': int(total_recaudado)},
+    )
+
     return render(request, 'caja/reporte_liquidacion.html', {
         'fecha_emision': timezone.localtime(),
         'fecha_filtro': fecha_filtro,
@@ -1589,5 +1952,200 @@ def caja_reporte_liquidacion_view(request):
         'total_comision': total_comision,
         'total_liquido': total_liquido,
     })
+
+
+# ==============================================================================
+# Módulo 6: Bitácora de Auditoría Clínica (Ley N° 20.584 · Solo Administrador)
+# ==============================================================================
+
+def _aplicar_filtros_auditoria(request, logs_qs):
+    tz = timezone.get_current_timezone()
+    modulo_raw = request.GET.get('modulo', '').strip()[:50]
+    resultado_raw = request.GET.get('resultado', '').strip()[:20]
+    accion_raw = request.GET.get('accion', '').strip()[:60]
+    fecha_desde_raw = request.GET.get('fecha_desde', '').strip()[:10]
+    fecha_hasta_raw = request.GET.get('fecha_hasta', '').strip()[:10]
+    query = request.GET.get('q', '').strip()[:80]
+
+    modulo_filtro = modulo_raw if modulo_raw in MODULOS_AUDITORIA else ''
+    if modulo_filtro:
+        logs_qs = logs_qs.filter(modulo=modulo_filtro)
+    elif modulo_raw:
+        logs_qs = logs_qs.none()
+
+    resultado_filtro = resultado_raw if resultado_raw in RESULTADOS_AUDITORIA else ''
+    if resultado_filtro:
+        logs_qs = logs_qs.filter(resultado=resultado_filtro)
+    elif resultado_raw:
+        logs_qs = logs_qs.none()
+
+    accion_filtro = ''
+    if accion_raw:
+        if re.fullmatch(r'[A-Z0-9_]+', accion_raw):
+            accion_filtro = accion_raw
+            logs_qs = logs_qs.filter(accion=accion_filtro)
+        else:
+            logs_qs = logs_qs.none()
+
+    fecha_desde_filtro = ''
+    if fecha_desde_raw:
+        try:
+            f_desde = datetime.strptime(fecha_desde_raw, '%Y-%m-%d').date()
+            fecha_desde_filtro = f_desde.strftime('%Y-%m-%d')
+            logs_qs = logs_qs.filter(fechaHora__gte=timezone.make_aware(datetime.combine(f_desde, time.min), tz))
+        except ValueError:
+            pass
+
+    fecha_hasta_filtro = ''
+    if fecha_hasta_raw:
+        try:
+            f_hasta = datetime.strptime(fecha_hasta_raw, '%Y-%m-%d').date()
+            fecha_hasta_filtro = f_hasta.strftime('%Y-%m-%d')
+            logs_qs = logs_qs.filter(fechaHora__lte=timezone.make_aware(datetime.combine(f_hasta, time.max), tz))
+        except ValueError:
+            pass
+
+    if query:
+        logs_qs = logs_qs.filter(
+            Q(usuarioUsername__icontains=query)
+            | Q(rolUsuario__icontains=query)
+            | Q(accion__icontains=query)
+            | Q(descripcion__icontains=query)
+            | Q(entidad__icontains=query)
+            | Q(entidadId__icontains=query)
+            | Q(ipOrigen__icontains=query)
+        )
+
+    return logs_qs, {
+        'modulo_filtro': modulo_filtro,
+        'resultado_filtro': resultado_filtro,
+        'accion_filtro': accion_filtro,
+        'fecha_desde_filtro': fecha_desde_filtro,
+        'fecha_hasta_filtro': fecha_hasta_filtro,
+        'query': query,
+    }
+
+
+@login_required
+@rol_requerido(['Administrador'])
+def auditoria_view(request):
+    """
+    Panel de Bitácora de Auditoría Clínica exclusivo para Administradores.
+    Permite auditar lecturas de fichas cifradas, emisión de certificados, anulaciones de pago e intentos denegados.
+    """
+    logs_qs = AuditLog.objects.select_related('usuario').order_by('-fechaHora', '-id')
+    logs_qs, filtros = _aplicar_filtros_auditoria(request, logs_qs)
+
+    total_registros = logs_qs.count()
+    lecturas_ficha_count = logs_qs.filter(accion='VER_FICHA_CLINICA').count()
+    documentos_emitidos_count = logs_qs.filter(accion='EMITIR_DOCUMENTO_CLINICO').count()
+    anulaciones_pago_count = logs_qs.filter(accion='ANULAR_PAGO').count()
+    alertas_seguridad_count = logs_qs.filter(resultado__in=['DENEGADO', 'FALLIDO']).count()
+
+    paginator = Paginator(logs_qs, 25)
+    page_number = parse_positive_int(request.GET.get('page')) or 1
+    page_obj = paginator.get_page(page_number)
+
+    acciones_disponibles = list(
+        AuditLog.objects.order_by('accion').values_list('accion', flat=True).distinct()
+    )
+
+    return render(request, 'auditoria.html', {
+        'page_obj': page_obj,
+        'logs': page_obj.object_list,
+        'total_registros': total_registros,
+        'lecturas_ficha_count': lecturas_ficha_count,
+        'documentos_emitidos_count': documentos_emitidos_count,
+        'anulaciones_pago_count': anulaciones_pago_count,
+        'alertas_seguridad_count': alertas_seguridad_count,
+        'modulos_disponibles': MODULOS_AUDITORIA,
+        'resultados_disponibles': RESULTADOS_AUDITORIA,
+        'acciones_disponibles': acciones_disponibles,
+        **filtros,
+    })
+
+
+@login_required
+@rol_requerido(['Administrador'])
+def auditoria_exportar_csv_view(request):
+    """
+    Exporta la bitácora filtrada en CSV UTF-8 BOM sanitizado contra CWE-1236.
+    """
+    logs_qs = AuditLog.objects.select_related('usuario').order_by('-fechaHora', '-id')
+    logs_qs, _ = _aplicar_filtros_auditoria(request, logs_qs)
+    registros = list(logs_qs[:5000])
+
+    registrar_auditoria(
+        request,
+        accion='EXPORTAR_AUDITORIA_CSV',
+        modulo='Seguridad',
+        entidad='AuditLog',
+        descripcion=f"Exportación CSV de Bitácora de Auditoría ({len(registros)} registros)",
+        datos_extra={'cantidad_registros': len(registros)},
+    )
+
+    response = HttpResponse(content_type='text/csv; charset=utf-8-sig')
+    response['Content-Disposition'] = f'attachment; filename="auditoria_centro_nodo_{timezone.localdate()}.csv"'
+
+    writer = csv.writer(response, delimiter=';')
+    writer.writerow([
+        'ID', 'Fecha/Hora', 'Usuario', 'Rol', 'Módulo', 'Acción',
+        'Resultado', 'Entidad', 'ID Recurso', 'IP Origen', 'Descripción'
+    ])
+    for log in registros:
+        writer.writerow([
+            log.id,
+            timezone.localtime(log.fechaHora).strftime('%d/%m/%Y %H:%M:%S'),
+            sanitizar_celda_csv(log.usuarioUsername),
+            sanitizar_celda_csv(log.rolUsuario),
+            sanitizar_celda_csv(log.modulo),
+            sanitizar_celda_csv(log.accion),
+            sanitizar_celda_csv(log.resultado),
+            sanitizar_celda_csv(log.entidad),
+            sanitizar_celda_csv(log.entidadId),
+            sanitizar_celda_csv(log.ipOrigen or ''),
+            sanitizar_celda_csv(log.descripcion),
+        ])
+    return response
+
+
+# ==============================================================================
+# Manejadores de Errores HTTP Personalizados (DEBUG=False y Preview)
+# ==============================================================================
+
+def error_403_view(request, exception=None):
+    """
+    Página HTTP 403 personalizada con estilo Clinical Glassmorphism.
+    """
+    if exception is not None:
+        registrar_auditoria(
+            request,
+            accion='ACCESO_DENEGADO',
+            modulo='Seguridad',
+            entidad='Ruta',
+            entidad_id=getattr(request, 'path', '')[:64],
+            descripcion=f"HTTP 403 PermissionDenied en {getattr(request, 'path', '/')}",
+            resultado='DENEGADO',
+        )
+    return render(request, '403.html', status=403)
+
+
+def error_404_view(request, exception=None):
+    """
+    Página HTTP 404 personalizada con estilo Clinical Glassmorphism.
+    """
+    return render(request, '404.html', {
+        'ruta_solicitada': getattr(request, 'path', ''),
+    }, status=404)
+
+
+def error_500_view(request):
+    """
+    Página HTTP 500 autónoma e independiente de base de datos/sesión.
+    No invoca context processors para evitar fallos en cascada.
+    """
+    template = get_template('500.html')
+    return HttpResponseServerError(template.render({}))
+
 
 

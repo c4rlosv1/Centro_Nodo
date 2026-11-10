@@ -8,15 +8,15 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="{% static 'css/style.css' %}?v=20261110-2">
-    <link rel="stylesheet" href="{% static 'css/dashboard.css' %}?v=20261110-2">
+    <link rel="stylesheet" href="{% static 'css/style.css' %}?v=20261110-3">
+    <link rel="stylesheet" href="{% static 'css/dashboard.css' %}?v=20261110-3">
     <script>
         (function() {
             const theme = localStorage.getItem('theme') || 'dark';
             document.documentElement.setAttribute('data-theme', theme);
         })();
     </script>
-    <script src="{% static 'js/theme.js' %}?v=20261110-2" defer></script>
+    <script src="{% static 'js/theme.js' %}?v=20261110-3" defer></script>
 </head>
 <body>
     <div class="site-ambient-bg" aria-hidden="true">
@@ -67,6 +67,9 @@
                             <li><a href="{% url 'caja' %}" class="{% if 'caja' in url_name or 'pago' in url_name %}is-active{% endif %}">Honorarios</a></li>
                         {% elif user.es_paciente %}
                             <li><a href="{% url 'caja' %}" class="{% if 'caja' in url_name or 'pago' in url_name %}is-active{% endif %}">Mis Pagos</a></li>
+                        {% endif %}
+                        {% if user.es_administrador %}
+                            <li><a href="{% url 'auditoria' %}" class="{% if 'auditoria' in url_name %}is-active{% endif %}">Auditoría</a></li>
                         {% endif %}
                     {% endif %}
                     {% endwith %}

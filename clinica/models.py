@@ -281,3 +281,41 @@ class NotificacionCita(models.Model):
 
     def __str__(self):
         return f"Notificación {self.tipo} - Cita #{self.cita.id} ({self.destinatario})"
+
+
+class AuditLog(models.Model):
+    """
+    Bitácora inmutable de auditoría clínica y seguridad para trazabilidad de accesos
+    a fichas cifradas, emisión de documentos y operaciones críticas (Ley N° 20.584).
+    """
+    id = models.AutoField(primary_key=True)
+    fechaHora = models.DateTimeField(default=timezone.now, db_index=True)
+    usuario = models.ForeignKey(
+        Usuario,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='registros_auditoria'
+    )
+    usuarioUsername = models.CharField(max_length=150, blank=True, default='anonimo')
+    rolUsuario = models.CharField(max_length=100, blank=True, default='Anónimo')
+    accion = models.CharField(max_length=60, db_index=True)
+    modulo = models.CharField(max_length=50, db_index=True)
+    entidad = models.CharField(max_length=60, blank=True, default='')
+    entidadId = models.CharField(max_length=64, blank=True, default='', db_index=True)
+    descripcion = models.CharField(max_length=255)
+    resultado = models.CharField(max_length=20, default='OK', db_index=True)  # OK, DENEGADO, FALLIDO
+    ipOrigen = models.GenericIPAddressField(null=True, blank=True)
+    userAgent = models.CharField(max_length=255, blank=True, default='')
+    datosExtra = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        app_label = 'clinica'
+        db_table = 'audit_log'
+        ordering = ['-fechaHora', '-id']
+        verbose_name = 'Registro de Auditoría Clínica'
+        verbose_name_plural = 'Bitácora de Auditoría Clínica'
+
+    def __str__(self):
+        return f"[{self.fechaHora:%d/%m/%Y %H:%M}] {self.usuarioUsername} -> {self.accion} ({self.resultado})"
+

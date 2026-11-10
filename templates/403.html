@@ -1,0 +1,42 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="error-page-shell">
+    <div class="error-glass-card">
+        <div class="error-pill error-pill-warn">
+            <span class="pulse-dot"></span>
+            <span>HTTP 403 &bull; Acceso Protegido por Rol Clínico</span>
+        </div>
+
+        <div class="error-code-display error-code-warn">403</div>
+
+        <h2 class="error-title">Acceso restringido por confidencialidad</h2>
+        <p class="error-description">
+            Tu rol actual no cuenta con privilegios para visualizar o modificar este recurso. En cumplimiento con la confidencialidad clínica y la <strong>Ley N° 20.584</strong>, este evento queda resguardado en la bitácora del sistema.
+        </p>
+
+        <div class="error-wave-divider" aria-hidden="true">
+            <svg viewBox="0 0 280 34" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path class="wave-live-pulse" d="M4 18H88L102 10L116 25L132 7L146 26L160 18H276" stroke="url(#err403Grad)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+                <defs>
+                    <linearGradient id="err403Grad" x1="4" y1="18" x2="276" y2="18" gradientUnits="userSpaceOnUse">
+                        <stop stop-color="#F59E0B" stop-opacity="0.25"/>
+                        <stop offset="0.5" stop-color="#FB7185"/>
+                        <stop offset="1" stop-color="#F59E0B" stop-opacity="0.35"/>
+                    </linearGradient>
+                </defs>
+            </svg>
+        </div>
+
+        <div class="error-actions">
+            {% if user.is_authenticated %}
+                <a href="{% url 'dashboard' %}" class="btn btn-primary btn-pill">Volver a Mi Panel</a>
+            {% else %}
+                <a href="{% url 'login' %}" class="btn btn-primary btn-pill">Iniciar Sesión</a>
+            {% endif %}
+            <button type="button" onclick="history.back()" class="btn btn-secondary btn-pill">Página Anterior</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+

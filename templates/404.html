@@ -1,0 +1,49 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="error-page-shell">
+    <div class="error-glass-card">
+        <div class="error-pill error-pill-info">
+            <span class="pulse-dot"></span>
+            <span>HTTP 404 &bull; Ruta o Recurso no Encontrado</span>
+        </div>
+
+        <div class="error-code-display">404</div>
+
+        <h2 class="error-title">No encontramos esta sección o expediente</h2>
+        <p class="error-description">
+            La dirección solicitada no existe, fue movida o el registro al que intentas acceder no está disponible en <strong>Centro Nodo</strong>.
+        </p>
+
+        {% if ruta_solicitada %}
+        <div class="error-path-box">
+            <span>Ruta consultada:</span>
+            <code>{{ ruta_solicitada }}</code>
+        </div>
+        {% endif %}
+
+        <div class="error-wave-divider" aria-hidden="true">
+            <svg viewBox="0 0 280 34" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path class="wave-live-pulse" d="M4 18H78L94 9L110 27L126 6L142 29L156 18H276" stroke="url(#err404Grad)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+                <defs>
+                    <linearGradient id="err404Grad" x1="4" y1="18" x2="276" y2="18" gradientUnits="userSpaceOnUse">
+                        <stop stop-color="#38BDF8" stop-opacity="0.2"/>
+                        <stop offset="0.5" stop-color="#38BDF8"/>
+                        <stop offset="1" stop-color="#818CF8" stop-opacity="0.3"/>
+                    </linearGradient>
+                </defs>
+            </svg>
+        </div>
+
+        <div class="error-actions">
+            {% if user.is_authenticated %}
+                <a href="{% url 'dashboard' %}" class="btn btn-primary btn-pill">Volver al Panel Principal</a>
+                <a href="{% url 'agendamiento' %}" class="btn btn-secondary btn-pill">Ir a Agendamiento</a>
+            {% else %}
+                <a href="{% url 'login' %}" class="btn btn-primary btn-pill">Ir a Iniciar Sesión</a>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
+

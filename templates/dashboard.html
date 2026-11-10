@@ -62,6 +62,9 @@
                     {% else %}Mis Pagos{% endif %}
                 </a>
                 {% endif %}
+                {% if user.es_administrador %}
+                <a href="{% url 'auditoria' %}" class="btn btn-glass btn-pill">Bitácora Auditoría</a>
+                {% endif %}
             </div>
         </div>
 

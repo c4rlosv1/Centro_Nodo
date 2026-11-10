@@ -1,0 +1,116 @@
+{% load static %}<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Error Interno (500) — Centro Nodo</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <script>
+        (function() {
+            var theme = 'dark';
+            try { theme = localStorage.getItem('theme') || 'dark'; } catch (e) {}
+            document.documentElement.setAttribute('data-theme', theme);
+        })();
+    </script>
+    <style>
+        /* Respaldo autónomo previo a style.css en caso de indisponibilidad de estáticos */
+        body {
+            margin: 0;
+            font-family: 'Plus Jakarta Sans', 'Segoe UI', system-ui, sans-serif;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            background: #060b16;
+            color: #f1f5f9;
+        }
+        [data-theme="light"] body {
+            background: #eef4fb;
+            color: #0f172a;
+        }
+        .fallback-header {
+            padding: 1rem 1.5rem;
+            border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            backdrop-filter: blur(20px);
+        }
+        .fallback-brand {
+            font-weight: 800;
+            font-size: 1.2rem;
+            color: inherit;
+            text-decoration: none;
+        }
+    </style>
+    <link rel="stylesheet" href="{% static 'css/style.css' %}?v=20261110-3">
+</head>
+<body>
+    <div class="site-ambient-bg" aria-hidden="true">
+        <img src="{% static 'img/hero-neuro-salud.jpg' %}?v=20261110-3" alt="" class="site-ambient-img">
+        <div class="site-ambient-scrim"></div>
+    </div>
+
+    <header class="site-header fallback-header">
+        <div class="container header-container">
+            <a href="/" class="logo-link fallback-brand">
+                <span class="brand-mark" aria-hidden="true">
+                    <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M16 27C16 27 6 20.5 6 12.6C6 9.3 8.5 6.8 11.7 6.8C13.7 6.8 15.2 7.9 16 9.3C16.8 7.9 18.3 6.8 20.3 6.8C23.5 6.8 26 9.3 26 12.6C26 20.5 16 27 16 27Z" stroke="#38BDF8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        <path d="M9.5 15.5H12.8L14.6 12L17.4 18.5L19.4 15.5H22.5" stroke="#FB7185" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                </span>
+                <span class="brand-copy">
+                    <span class="logo">Centro Nodo</span>
+                    <span class="brand-sub">Salud Integral</span>
+                </span>
+            </a>
+        </div>
+    </header>
+
+    <main class="container" style="flex: 1; display: flex; align-items: center; justify-content: center;">
+        <div class="error-page-shell" style="width: 100%;">
+            <div class="error-glass-card">
+                <div class="error-pill error-pill-danger">
+                    <span class="pulse-dot"></span>
+                    <span>HTTP 500 &bull; Incidencia Temporal del Servidor</span>
+                </div>
+
+                <div class="error-code-display error-code-danger">500</div>
+
+                <h2 class="error-title">Ocurrió una incidencia inesperada</h2>
+                <p class="error-description">
+                    Nuestro servidor encontró una condición imprevista al procesar la solicitud. Tus expedientes clínicos cifrados e historial permanecen seguros e intactos.
+                </p>
+
+                <div class="error-wave-divider" aria-hidden="true">
+                    <svg viewBox="0 0 280 34" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path class="wave-live-pulse" d="M4 18H84L98 11L112 24L126 12L140 23L154 18H276" stroke="url(#err500Grad)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+                        <defs>
+                            <linearGradient id="err500Grad" x1="4" y1="18" x2="276" y2="18" gradientUnits="userSpaceOnUse">
+                                <stop stop-color="#FB7185" stop-opacity="0.25"/>
+                                <stop offset="0.5" stop-color="#EF4444"/>
+                                <stop offset="1" stop-color="#38BDF8" stop-opacity="0.35"/>
+                            </linearGradient>
+                        </defs>
+                    </svg>
+                </div>
+
+                <div class="error-actions">
+                    <a href="/" class="btn btn-primary btn-pill">Volver al Inicio</a>
+                    <button type="button" onclick="location.reload()" class="btn btn-secondary btn-pill">Reintentar</button>
+                    <a href="mailto:soporte@centronodo.cl" class="btn btn-secondary btn-pill">Reportar a Soporte</a>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <footer class="site-footer">
+        <div class="container footer-inner">
+            <p>&copy; 2026 <strong>Centro Nodo</strong> &mdash; Salud Mental Integral y Telemedicina P2P</p>
+            <span class="footer-meta">Manuel Antonio Matta 549, Osorno, Chile</span>
+        </div>
+    </footer>
+</body>
+</html>

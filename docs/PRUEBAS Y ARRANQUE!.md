@@ -1,4 +1,4 @@
-# 1. Ejecutar las 28 pruebas automatizadas (7 Fases + Seguridad/Límites)
+# 1. Ejecutar las 31 pruebas automatizadas (7 Fases + Seguridad/Límites + Auditoría y Errores 403/404/500)
 .\.venv\Scripts\python.exe manage.py test clinica -v 2
 
 # 2. Verificar integridad del proyecto y que no falten migraciones

@@ -12,6 +12,7 @@ from .models import (
     FichaClinica,
     AtencionClinica,
     NotificacionCita,
+    AuditLog,
 )
 
 
@@ -92,4 +93,26 @@ class NotificacionCitaAdmin(admin.ModelAdmin):
     list_display = ('id', 'cita', 'tipo', 'destinatario', 'exitoso', 'enviadoEn')
     list_filter = ('tipo', 'exitoso')
     search_fields = ('destinatario', 'asunto', 'cita__paciente__rut')
+
+
+@admin.register(AuditLog)
+class AuditLogAdmin(admin.ModelAdmin):
+    list_display = ('id', 'fechaHora', 'usuarioUsername', 'rolUsuario', 'modulo', 'accion', 'resultado', 'ipOrigen')
+    list_filter = ('resultado', 'modulo', 'accion', 'rolUsuario')
+    search_fields = ('usuarioUsername', 'accion', 'descripcion', 'entidad', 'entidadId', 'ipOrigen')
+    readonly_fields = (
+        'fechaHora', 'usuario', 'usuarioUsername', 'rolUsuario', 'accion',
+        'modulo', 'entidad', 'entidadId', 'descripcion', 'resultado',
+        'ipOrigen', 'userAgent', 'datosExtra',
+    )
+    ordering = ('-fechaHora', '-id')
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
 

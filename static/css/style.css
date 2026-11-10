@@ -1809,6 +1809,210 @@ textarea.form-control {
     white-space: nowrap;
 }
 
+/* ==========================================================================
+   Bitácora de Auditoría Clínica & Paginación
+   ========================================================================== */
+
+.audit-filter-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(175px, 1fr));
+    gap: 0.85rem;
+    align-items: end;
+    margin-bottom: 1.35rem;
+    padding: 1rem 1.15rem;
+    background: var(--surface-subtle);
+    border: 1px solid var(--border-color);
+    border-radius: 14px;
+}
+
+.audit-filter-grid .form-group {
+    margin-bottom: 0;
+}
+
+.audit-filter-actions {
+    display: flex;
+    gap: 0.55rem;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.audit-module-tag {
+    display: inline-block;
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--primary-color);
+    margin-bottom: 0.22rem;
+}
+
+.audit-action-code,
+.audit-ip-code {
+    display: inline-block;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.76rem;
+    padding: 0.16rem 0.48rem;
+    border-radius: 6px;
+    background: var(--surface-subtle);
+    border: 1px solid var(--border-color);
+    color: var(--text-color);
+    white-space: nowrap;
+}
+
+.pagination-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.85rem;
+    margin-top: 1.25rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--border-color);
+}
+
+.pagination-info {
+    font-size: 0.86rem;
+    color: var(--text-secondary);
+    font-weight: 600;
+}
+
+.pagination-controls {
+    display: inline-flex;
+    gap: 0.45rem;
+    flex-wrap: wrap;
+}
+
+/* ==========================================================================
+   Páginas de Error Glassmorphism (403, 404, 500)
+   ========================================================================== */
+
+.error-page-shell {
+    min-height: 62vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem 0;
+}
+
+.error-glass-card {
+    position: relative;
+    width: 100%;
+    max-width: 640px;
+    text-align: center;
+    padding: 2.75rem 2.25rem;
+    border-radius: 24px;
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    backdrop-filter: blur(24px) saturate(160%);
+    box-shadow: var(--shadow-lg), inset 0 1px 0 var(--specular-highlight);
+    overflow: hidden;
+}
+
+.error-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.55rem;
+    padding: 0.38rem 0.95rem;
+    border-radius: 9999px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    margin-bottom: 1.15rem;
+    border: 1px solid var(--badge-info-border);
+    background: var(--badge-info-bg);
+    color: var(--badge-info-text);
+}
+
+.error-pill-warn {
+    background: var(--badge-warn-bg);
+    border-color: var(--badge-warn-border);
+    color: var(--badge-warn-text);
+}
+
+.error-pill-danger {
+    background: var(--badge-danger-bg);
+    border-color: var(--badge-danger-border);
+    color: var(--badge-danger-text);
+}
+
+.error-code-display {
+    font-size: clamp(4.2rem, 11vw, 6.2rem);
+    font-weight: 800;
+    line-height: 0.95;
+    letter-spacing: -0.05em;
+    margin-bottom: 0.85rem;
+    background: linear-gradient(135deg, #38bdf8 0%, #6366f1 55%, #fb7185 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    filter: drop-shadow(0 12px 26px rgba(56, 189, 248, 0.25));
+}
+
+.error-code-warn {
+    background: linear-gradient(135deg, #f59e0b 0%, #fb7185 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+}
+
+.error-code-danger {
+    background: linear-gradient(135deg, #ef4444 0%, #fb7185 55%, #38bdf8 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+}
+
+.error-title {
+    font-size: 1.55rem;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    margin-bottom: 0.7rem;
+    color: var(--text-color);
+}
+
+.error-description {
+    font-size: 0.96rem;
+    color: var(--text-secondary);
+    max-width: 500px;
+    margin: 0 auto 1.25rem;
+}
+
+.error-path-box {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    justify-content: center;
+    padding: 0.45rem 0.9rem;
+    border-radius: 10px;
+    background: var(--surface-subtle);
+    border: 1px solid var(--border-color);
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+    margin-bottom: 1.15rem;
+}
+
+.error-path-box code {
+    color: var(--primary-color);
+    font-weight: 600;
+}
+
+.error-wave-divider {
+    max-width: 280px;
+    margin: 0.35rem auto 1.4rem;
+}
+
+.error-wave-divider svg {
+    width: 100%;
+    height: auto;
+    display: block;
+}
+
+.error-actions {
+    display: flex;
+    justify-content: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
 @media (prefers-reduced-motion: reduce) {
     .site-ambient-img,
     .wave-live-pulse,

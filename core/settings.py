@@ -46,6 +46,8 @@ CSRF_COOKIE_SAMESITE = 'Lax'
 SECURE_CONTENT_TYPE_NOSNIFF = True
 X_FRAME_OPTIONS = 'DENY'
 DATA_UPLOAD_MAX_MEMORY_SIZE = 2 * 1024 * 1024  # Máximo 2 MB por solicitud POST
+# Solo activar True detrás de un proxy inverso confiable (Nginx/Cloudflare) para evitar IP spoofing
+TRUST_X_FORWARDED_FOR = os.environ.get('TRUST_X_FORWARDED_FOR', 'False').lower() == 'true'
 
 AUTH_USER_MODEL = 'clinica.Usuario'
 

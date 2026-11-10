@@ -1,0 +1,179 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h2>🛡️ Bitácora de Auditoría Clínica</h2>
+        <p>Trazabilidad inmutable de lecturas de fichas cifradas, emisión de documentos, anulaciones de pago e intentos de acceso (Ley N° 20.584)</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'auditoria_exportar_csv' %}?modulo={{ modulo_filtro|urlencode }}&resultado={{ resultado_filtro|urlencode }}&accion={{ accion_filtro|urlencode }}&fecha_desde={{ fecha_desde_filtro|urlencode }}&fecha_hasta={{ fecha_hasta_filtro|urlencode }}&q={{ query|urlencode }}" class="btn btn-primary btn-pill">
+            📥 Exportar Bitácora CSV
+        </a>
+        <a href="{% url 'dashboard' %}" class="btn btn-secondary btn-pill">Volver al Panel</a>
+    </div>
+</div>
+
+<!-- KPI Resumen de Auditoría -->
+<div class="stats-grid">
+    <div class="stat-card">
+        <span class="stat-label">Eventos Registrados</span>
+        <span class="stat-value">{{ total_registros }}</span>
+    </div>
+    <div class="stat-card">
+        <span class="stat-label">Lecturas de Fichas Cifradas</span>
+        <span class="stat-value">{{ lecturas_ficha_count }}</span>
+    </div>
+    <div class="stat-card">
+        <span class="stat-label">Documentos / Certificados</span>
+        <span class="stat-value">{{ documentos_emitidos_count }}</span>
+    </div>
+    <div class="stat-card">
+        <span class="stat-label">Pagos Anulados</span>
+        <span class="stat-value">{{ anulaciones_pago_count }}</span>
+    </div>
+    <div class="stat-card">
+        <span class="stat-label">Denegados / Fallidos</span>
+        <span class="stat-value">{{ alertas_seguridad_count }}</span>
+    </div>
+</div>
+
+<div class="panel-card">
+    <div class="agenda-panel-head">
+        <div>
+            <h3 style="margin-bottom: 0;">📜 Registro Cronológico de Eventos</h3>
+        </div>
+        <span class="agenda-count-badge">
+            Mostrando {{ page_obj.object_list|length }} de {{ total_registros }} evento{{ total_registros|pluralize }}
+        </span>
+    </div>
+
+    <form method="GET" action="{% url 'auditoria' %}" class="audit-filter-grid">
+        <div class="form-group">
+            <label for="f_q">Buscar (Usuario, RUT, IP, Descripción)</label>
+            <input type="text" id="f_q" name="q" value="{{ query }}" maxlength="80" placeholder="Ej. doctor.silva, 127.0.0.1, Ficha #3">
+        </div>
+        <div class="form-group">
+            <label for="f_modulo">Módulo</label>
+            <select id="f_modulo" name="modulo">
+                <option value="">Todos</option>
+                {% for mod in modulos_disponibles %}
+                    <option value="{{ mod }}" {% if modulo_filtro == mod %}selected{% endif %}>{{ mod }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="f_accion">Acción</label>
+            <select id="f_accion" name="accion">
+                <option value="">Todas</option>
+                {% for acc in acciones_disponibles %}
+                    <option value="{{ acc }}" {% if accion_filtro == acc %}selected{% endif %}>{{ acc }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="f_resultado">Resultado</label>
+            <select id="f_resultado" name="resultado">
+                <option value="">Todos</option>
+                {% for res in resultados_disponibles %}
+                    <option value="{{ res }}" {% if resultado_filtro == res %}selected{% endif %}>{{ res }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="f_desde">Desde</label>
+            <input type="date" id="f_desde" name="fecha_desde" value="{{ fecha_desde_filtro }}">
+        </div>
+        <div class="form-group">
+            <label for="f_hasta">Hasta</label>
+            <input type="date" id="f_hasta" name="fecha_hasta" value="{{ fecha_hasta_filtro }}">
+        </div>
+        <div class="audit-filter-actions">
+            <button type="submit" class="btn btn-primary btn-sm btn-pill">Filtrar</button>
+            <a href="{% url 'auditoria' %}" class="btn btn-secondary btn-sm btn-pill">Limpiar</a>
+        </div>
+    </form>
+
+    {% if logs %}
+    <div class="table-wrapper">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Fecha / Hora</th>
+                    <th>Usuario y Rol</th>
+                    <th>Módulo y Acción</th>
+                    <th>Resultado</th>
+                    <th>Recurso</th>
+                    <th>Descripción del Evento</th>
+                    <th>IP Origen</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for log in logs %}
+                <tr>
+                    <td data-label="Fecha / Hora">
+                        <strong>{{ log.fechaHora|date:"d/m/Y" }}</strong><br>
+                        <span class="time-pill">{{ log.fechaHora|date:"H:i:s" }}</span>
+                    </td>
+                    <td data-label="Usuario y Rol">
+                        <strong>{{ log.usuarioUsername }}</strong><br>
+                        <small class="timeline-meta">{{ log.rolUsuario }}</small>
+                    </td>
+                    <td data-label="Módulo y Acción">
+                        <span class="audit-module-tag">{{ log.modulo }}</span><br>
+                        <code class="audit-action-code">{{ log.accion }}</code>
+                    </td>
+                    <td data-label="Resultado">
+                        {% if log.resultado == 'OK' %}
+                            <span class="status-badge status-pagado">OK</span>
+                        {% elif log.resultado == 'DENEGADO' %}
+                            <span class="status-badge status-anulado">DENEGADO</span>
+                        {% else %}
+                            <span class="status-badge status-pendiente">{{ log.resultado }}</span>
+                        {% endif %}
+                    </td>
+                    <td data-label="Recurso">
+                        {% if log.entidad %}
+                            <strong>{{ log.entidad }}</strong>
+                            {% if log.entidadId %}<small class="timeline-meta">#{{ log.entidadId }}</small>{% endif %}
+                        {% else %}
+                            <span class="timeline-meta">&mdash;</span>
+                        {% endif %}
+                    </td>
+                    <td data-label="Descripción">
+                        {{ log.descripcion }}
+                    </td>
+                    <td data-label="IP Origen">
+                        <code class="audit-ip-code">{{ log.ipOrigen|default:"N/D" }}</code>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if page_obj.paginator.num_pages > 1 %}
+    <div class="pagination-bar" aria-label="Paginación de bitácora">
+        <span class="pagination-info">
+            Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}
+        </span>
+        <div class="pagination-controls">
+            {% if page_obj.has_previous %}
+                <a href="?page=1&modulo={{ modulo_filtro|urlencode }}&resultado={{ resultado_filtro|urlencode }}&accion={{ accion_filtro|urlencode }}&fecha_desde={{ fecha_desde_filtro|urlencode }}&fecha_hasta={{ fecha_hasta_filtro|urlencode }}&q={{ query|urlencode }}" class="btn btn-sm btn-secondary btn-pill">&laquo; Primera</a>
+                <a href="?page={{ page_obj.previous_page_number }}&modulo={{ modulo_filtro|urlencode }}&resultado={{ resultado_filtro|urlencode }}&accion={{ accion_filtro|urlencode }}&fecha_desde={{ fecha_desde_filtro|urlencode }}&fecha_hasta={{ fecha_hasta_filtro|urlencode }}&q={{ query|urlencode }}" class="btn btn-sm btn-secondary btn-pill">&lsaquo; Anterior</a>
+            {% endif %}
+            {% if page_obj.has_next %}
+                <a href="?page={{ page_obj.next_page_number }}&modulo={{ modulo_filtro|urlencode }}&resultado={{ resultado_filtro|urlencode }}&accion={{ accion_filtro|urlencode }}&fecha_desde={{ fecha_desde_filtro|urlencode }}&fecha_hasta={{ fecha_hasta_filtro|urlencode }}&q={{ query|urlencode }}" class="btn btn-sm btn-secondary btn-pill">Siguiente &rsaquo;</a>
+                <a href="?page={{ page_obj.paginator.num_pages }}&modulo={{ modulo_filtro|urlencode }}&resultado={{ resultado_filtro|urlencode }}&accion={{ accion_filtro|urlencode }}&fecha_desde={{ fecha_desde_filtro|urlencode }}&fecha_hasta={{ fecha_hasta_filtro|urlencode }}&q={{ query|urlencode }}" class="btn btn-sm btn-secondary btn-pill">Última &raquo;</a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+    {% else %}
+    <div class="empty-state">
+        <p>No se encontraron registros en la bitácora con los filtros seleccionados.</p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
+

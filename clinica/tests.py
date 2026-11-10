@@ -3,14 +3,17 @@ from io import StringIO
 from datetime import timedelta
 from decimal import Decimal
 from django.conf import settings
+from django.contrib import admin
 from django.core import mail
 from django.core.cache import cache
+from django.core.exceptions import PermissionDenied
 from django.core.management import call_command
 from django.db import connection
-from django.test import TestCase, Client
+from django.test import TestCase, Client, RequestFactory, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
+from clinica.admin import AuditLogAdmin
 from clinica.crypto import decrypt_text
 from clinica.models import (
     Rol,
@@ -24,8 +27,10 @@ from clinica.models import (
     FichaClinica,
     AtencionClinica,
     NotificacionCita,
+    AuditLog,
 )
 from clinica.utils import validar_rut, formatear_rut
+from clinica.views import error_403_view, error_500_view
 
 
 class RutUtilsTests(TestCase):
@@ -1688,6 +1693,260 @@ class HardeningSeguridadLimitesTests(TestCase):
         csv_body = resp.content.decode('utf-8-sig')
         self.assertIn("'=cmd|'/C calc'!A0 @SUM(1+1)", csv_body)
         self.assertIn("'+CMP-INJ", csv_body)
+
+
+class AuditoriaClinicaYErroresTests(TestCase):
+    def setUp(self):
+        self.rol_admin = Rol.objects.create(nombre='Administrador')
+        self.rol_prof = Rol.objects.create(nombre='Profesional')
+        self.rol_recep = Rol.objects.create(nombre='Recepcionista')
+        self.rol_pac = Rol.objects.create(nombre='Paciente')
+
+        self.user_admin = Usuario.objects.create_user(
+            username='admin_aud',
+            email='admin_aud@centronodo.cl',
+            password='password123',
+            first_name='Admin',
+            last_name='Auditor',
+            rol=self.rol_admin,
+        )
+        self.user_prof = Usuario.objects.create_user(
+            username='prof_aud',
+            email='prof_aud@centronodo.cl',
+            password='password123',
+            first_name='Andrés',
+            last_name='Silva',
+            rol=self.rol_prof,
+        )
+        self.prof = Profesional.objects.create(
+            usuario=self.user_prof,
+            rut='15.342.980-4',
+            nombres='Andrés',
+            apellidos='Silva',
+            especialidad='Psiquiatría',
+        )
+        self.user_recep = Usuario.objects.create_user(
+            username='recep_aud',
+            email='recep_aud@centronodo.cl',
+            password='password123',
+            rol=self.rol_recep,
+        )
+        self.user_pac = Usuario.objects.create_user(
+            username='pac_aud',
+            email='pac_aud@correo.cl',
+            password='password123',
+            rol=self.rol_pac,
+        )
+        self.pac = Paciente.objects.create(
+            usuario=self.user_pac,
+            rut='19.876.543-0',
+            nombres='Juan',
+            apellidos='Pérez',
+        )
+        self.ficha = FichaClinica.objects.create(paciente=self.pac)
+
+        self.user_otro_pac = Usuario.objects.create_user(
+            username='otro_pac_aud',
+            email='otro_aud@correo.cl',
+            password='password123',
+            rol=self.rol_pac,
+        )
+        self.otro_pac = Paciente.objects.create(
+            usuario=self.user_otro_pac,
+            rut='17.654.321-3',
+            nombres='Lucía',
+            apellidos='Gómez',
+        )
+        self.ficha_otra = FichaClinica.objects.create(paciente=self.otro_pac)
+
+        self.client = Client()
+
+    def test_auditoria_registra_login_fichas_certificados_pagos_y_denegados(self):
+        # 1. Login fallido y login exitoso + logout
+        self.client.post(reverse('login'), {'login_id': 'prof_aud', 'password': 'incorrecta'})
+        log_fail = AuditLog.objects.filter(accion='LOGIN_FALLIDO').latest('id')
+        self.assertEqual(log_fail.resultado, 'FALLIDO')
+        self.assertEqual(log_fail.ipOrigen, '127.0.0.1')
+
+        self.client.post(reverse('login'), {'login_id': 'prof_aud', 'password': 'password123'})
+        log_ok = AuditLog.objects.filter(accion='LOGIN_EXITOSO', usuario=self.user_prof).latest('id')
+        self.assertEqual(log_ok.rolUsuario, 'Profesional')
+        self.assertEqual(log_ok.ipOrigen, '127.0.0.1')
+
+        # 2. Lectura de Ficha Clínica cifrada, edición de antecedentes, creación de atención y certificado
+        self.client.get(reverse('ficha_detalle', args=[self.ficha.id]))
+        self.assertTrue(
+            AuditLog.objects.filter(
+                accion='VER_FICHA_CLINICA',
+                usuario=self.user_prof,
+                entidad='FichaClinica',
+                entidadId=str(self.ficha.id),
+                resultado='OK',
+            ).exists()
+        )
+
+        self.client.post(reverse('ficha_editar_antecedentes', args=[self.ficha.id]), {
+            'grupoSanguineo': 'O+',
+            'alergias': 'Penicilina',
+            'antecedentesMedicos': 'Hipertensión controlada',
+        })
+        self.assertTrue(
+            AuditLog.objects.filter(
+                accion='EDITAR_ANTECEDENTES_FICHA',
+                usuario=self.user_prof,
+                entidadId=str(self.ficha.id),
+            ).exists()
+        )
+
+        texto_sensible_diag = 'DIAGNOSTICO_CONFIDENCIAL_XYZ'
+        texto_sensible_evol = 'EVOLUCION_SECRETA_ABC'
+        self.client.post(reverse('atencion_crear', args=[self.ficha.id]), {
+            'profesional': self.prof.id,
+            'motivoConsulta': 'Control clínico',
+            'diagnostico': texto_sensible_diag,
+            'evolucionNotas': texto_sensible_evol,
+            'indicacionesTratamiento': 'Descanso y seguimiento',
+        })
+        atencion = AtencionClinica.objects.get(fichaClinica=self.ficha)
+        log_at = AuditLog.objects.filter(accion='CREAR_ATENCION_CLINICA', entidadId=str(atencion.id)).first()
+        self.assertIsNotNone(log_at)
+        # Privacidad clínica: nunca filtrar diagnósticos ni notas cifradas hacia la bitácora
+        self.assertNotIn(texto_sensible_diag, log_at.descripcion)
+        self.assertNotIn(texto_sensible_evol, log_at.descripcion)
+        self.assertNotIn(texto_sensible_diag, json.dumps(log_at.datosExtra))
+        self.assertNotIn(texto_sensible_evol, json.dumps(log_at.datosExtra))
+
+        self.client.get(reverse('atencion_documento', args=[atencion.id]), {'tipo': 'certificado'})
+        log_cert = AuditLog.objects.filter(accion='EMITIR_DOCUMENTO_CLINICO', entidadId=str(atencion.id)).first()
+        self.assertIsNotNone(log_cert)
+        self.assertEqual(log_cert.datosExtra.get('tipo_doc'), 'certificado')
+
+        # Logout via POST
+        self.client.post(reverse('logout'))
+        self.assertTrue(AuditLog.objects.filter(accion='LOGOUT', usuario=self.user_prof).exists())
+
+        # 3. Otro paciente intentando leer ficha ajena -> ACCESO_DENEGADO
+        self.client.force_login(self.user_otro_pac)
+        self.client.get(reverse('ficha_detalle', args=[self.ficha.id]))
+        self.assertTrue(
+            AuditLog.objects.filter(
+                accion='ACCESO_DENEGADO',
+                usuario=self.user_otro_pac,
+                entidad='FichaClinica',
+                entidadId=str(self.ficha.id),
+                resultado='DENEGADO',
+            ).exists()
+        )
+
+        # 4. Recepcionista registra, confirma y anula un pago -> registra eventos en bitácora
+        cita = Cita.objects.create(
+            paciente=self.pac,
+            profesional=self.prof,
+            fechaHoraInicio=timezone.now() + timedelta(hours=3),
+            fechaHoraFin=timezone.now() + timedelta(hours=3, minutes=45),
+        )
+        self.client.force_login(self.user_recep)
+        self.client.post(reverse('caja'), {
+            'cita': cita.id,
+            'monto': '40000',
+            'prevision': 'Particular',
+            'metodoPago': 'Transferencia',
+            'estado': 'Pendiente',
+        })
+        pago = Pago.objects.get(cita=cita)
+        self.assertTrue(AuditLog.objects.filter(accion='REGISTRAR_PAGO', entidadId=str(pago.id)).exists())
+
+        self.client.post(reverse('pago_cambiar_estado', args=[pago.id]), {'estado': 'Pagado'})
+        self.assertTrue(AuditLog.objects.filter(accion='CONFIRMAR_PAGO', entidadId=str(pago.id)).exists())
+
+        self.client.post(reverse('pago_cambiar_estado', args=[pago.id]), {'estado': 'Anulado'})
+        log_anul = AuditLog.objects.filter(accion='ANULAR_PAGO', entidadId=str(pago.id)).first()
+        self.assertIsNotNone(log_anul)
+        self.assertEqual(log_anul.datosExtra.get('estado_anterior'), 'Pagado')
+        self.assertEqual(log_anul.datosExtra.get('estado_nuevo'), 'Anulado')
+
+    def test_auditoria_rbac_panel_admin_filtros_fuzzing_csv_e_inmutabilidad(self):
+        AuditLog.objects.create(
+            usuario=self.user_prof,
+            usuarioUsername='=cmd|evil',
+            rolUsuario='Profesional',
+            accion='VER_FICHA_CLINICA',
+            modulo='Fichas Clínicas',
+            entidad='FichaClinica',
+            entidadId='99',
+            descripcion='@SUM(1+1) lectura de ficha',
+            resultado='OK',
+            ipOrigen='127.0.0.1',
+        )
+
+        # Solo Administrador accede al panel y exportación CSV de auditoría
+        for usuario_no_admin in (self.user_prof, self.user_recep, self.user_pac):
+            self.client.force_login(usuario_no_admin)
+            self.assertEqual(self.client.get(reverse('auditoria')).status_code, 302)
+            self.assertEqual(self.client.get(reverse('auditoria_exportar_csv')).status_code, 302)
+
+        self.client.force_login(self.user_admin)
+        resp = self.client.get(reverse('auditoria'))
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn('Bitácora de Auditoría Clínica', resp.content.decode('utf-8'))
+
+        # Fuzzing / SQLi en filtros GET -> nunca genera HTTP 500
+        payload_sqli = "' OR '1'='1'; DROP TABLE audit_log; --"
+        resp_fuzz = self.client.get(reverse('auditoria'), {
+            'modulo': payload_sqli,
+            'resultado': payload_sqli,
+            'accion': payload_sqli,
+            'fecha_desde': payload_sqli,
+            'fecha_hasta': '9999-99-99',
+            'q': 'A' * 200,
+            'page': payload_sqli,
+        })
+        self.assertEqual(resp_fuzz.status_code, 200)
+
+        # Exportación CSV sanitizada contra CWE-1236
+        resp_csv = self.client.get(reverse('auditoria_exportar_csv'))
+        self.assertEqual(resp_csv.status_code, 200)
+        csv_body = resp_csv.content.decode('utf-8-sig')
+        self.assertIn("'=cmd|evil", csv_body)
+        self.assertIn("'@SUM(1+1) lectura de ficha", csv_body)
+
+        # AuditLogAdmin debe ser estrictamente de solo lectura (inmutable)
+        ma = AuditLogAdmin(AuditLog, admin.site)
+        req_admin = RequestFactory().get('/admin/')
+        req_admin.user = self.user_admin
+        self.assertFalse(ma.has_add_permission(req_admin))
+        self.assertFalse(ma.has_change_permission(req_admin))
+        self.assertFalse(ma.has_delete_permission(req_admin))
+
+    @override_settings(DEBUG=False)
+    def test_paginas_error_personalizadas_404_403_500_glassmorphism(self):
+        # 1. HTTP 404 con DEBUG=False usa templates/404.html
+        self.client.force_login(self.user_pac)
+        resp_404 = self.client.get('/ruta-inexistente-centro-nodo-404/')
+        self.assertEqual(resp_404.status_code, 404)
+        html_404 = resp_404.content.decode('utf-8')
+        self.assertIn('404', html_404)
+        self.assertIn('No encontramos esta sección o expediente', html_404)
+
+        # 2. HTTP 403 renderiza templates/403.html y audita PermissionDenied
+        req_403 = RequestFactory().get('/zona-restringida/')
+        req_403.user = self.user_pac
+        resp_403 = error_403_view(req_403, exception=PermissionDenied("Prohibido"))
+        self.assertEqual(resp_403.status_code, 403)
+        html_403 = resp_403.content.decode('utf-8')
+        self.assertIn('403', html_403)
+        self.assertIn('Acceso restringido por confidencialidad', html_403)
+        self.assertTrue(AuditLog.objects.filter(accion='ACCESO_DENEGADO', usuario=self.user_pac).exists())
+
+        # 3. HTTP 500 autónomo funciona incluso sin usuario/sesión/context_processors
+        req_500 = RequestFactory().get('/fallo-simulado/')
+        resp_500 = error_500_view(req_500)
+        self.assertEqual(resp_500.status_code, 500)
+        html_500 = resp_500.content.decode('utf-8')
+        self.assertIn('500', html_500)
+        self.assertIn('Ocurrió una incidencia inesperada', html_500)
+        self.assertIn('Centro Nodo', html_500)
+
 
 
 
