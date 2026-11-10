@@ -31,7 +31,21 @@ CLINICAL_ENCRYPTION_KEY = os.environ.get('CLINICAL_ENCRYPTION_KEY', SECRET_KEY)
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.environ.get('DEBUG', 'True').lower() == 'true'
 
-ALLOWED_HOSTS = ['localhost', '127.0.0.1', 'testserver', '*']
+# Hosts permitidos configurables vía .env (evita wildcard '*' en ALLOWED_HOSTS)
+_allowed_hosts_env = os.environ.get('ALLOWED_HOSTS', '').strip()
+if _allowed_hosts_env:
+    ALLOWED_HOSTS = [h.strip() for h in _allowed_hosts_env.split(',') if h.strip()]
+else:
+    ALLOWED_HOSTS = ['localhost', '127.0.0.1', 'testserver']
+
+# Cabeceras y cookies de seguridad
+SESSION_COOKIE_HTTPONLY = True
+CSRF_COOKIE_HTTPONLY = True
+SESSION_COOKIE_SAMESITE = 'Lax'
+CSRF_COOKIE_SAMESITE = 'Lax'
+SECURE_CONTENT_TYPE_NOSNIFF = True
+X_FRAME_OPTIONS = 'DENY'
+DATA_UPLOAD_MAX_MEMORY_SIZE = 2 * 1024 * 1024  # Máximo 2 MB por solicitud POST
 
 AUTH_USER_MODEL = 'clinica.Usuario'
 

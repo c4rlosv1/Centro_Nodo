@@ -13,6 +13,7 @@ from django.db.models import Q, Count, Sum
 from django.http import JsonResponse, HttpResponse
 from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
+from django.views.decorators.http import require_POST
 
 from .models import (
     Rol,
@@ -38,7 +39,11 @@ from .forms import (
 )
 from .decorators import rol_requerido
 from .notifications import enviar_notificacion_cita
-from .utils import limpiar_rut
+from .utils import limpiar_rut, sanitizar_celda_csv, parse_positive_int
+
+ESTADOS_CITA_VALIDOS = ('Agendada', 'Confirmada', 'En atención', 'Realizada', 'Cancelada')
+ESTADOS_PAGO_VALIDOS = ('Pagado', 'Pendiente', 'Anulado')
+METODOS_PAGO_VALIDOS = ('Transferencia', 'Débito', 'Crédito', 'Efectivo', 'Bono Fonasa')
 
 
 def login_view(request):
@@ -94,9 +99,11 @@ def login_view(request):
     })
 
 
+@require_POST
 def logout_view(request):
     """
-    Cierra la sesión activa del usuario y redirige al login con mensaje explicativo.
+    Cierra la sesión activa del usuario mediante POST (protegido contra CSRF)
+    y redirige al login con mensaje explicativo.
     """
     if request.user.is_authenticated:
         logout(request)
@@ -225,7 +232,7 @@ def pacientes_lista_view(request):
     """
     Listado y búsqueda de pacientes por RUT, nombre o apellido.
     """
-    query = request.GET.get('q', '').strip()
+    query = request.GET.get('q', '').strip()[:80]
     pacientes = Paciente.objects.select_related('usuario', 'ficha_clinica').annotate(
         total_citas=Count('citas')
     ).order_by('apellidos', 'nombres')
@@ -383,7 +390,7 @@ def fichas_lista_view(request):
         messages.warning(request, "El acceso a fichas clínicas está restringido al equipo clínico.")
         return redirect('dashboard')
 
-    query = request.GET.get('q', '').strip()
+    query = request.GET.get('q', '').strip()[:80]
     fichas = FichaClinica.objects.select_related('paciente').annotate(
         total_atenciones=Count('atenciones')
     ).order_by('-fechaCreacion')
@@ -432,7 +439,7 @@ def ficha_detalle_view(request, ficha_id):
     if es_clinico:
         ficha_form = FichaClinicaForm(instance=ficha)
         initial_atencion = {}
-        cita_id = request.GET.get('cita_id')
+        cita_id = parse_positive_int(request.GET.get('cita_id'))
         if cita_id:
             cita_obj = Cita.objects.filter(
                 pk=cita_id,
@@ -459,25 +466,28 @@ def ficha_detalle_view(request, ficha_id):
 
 @login_required
 @rol_requerido(['Administrador', 'Profesional'])
+@require_POST
 def ficha_editar_antecedentes_view(request, ficha_id):
     """
     Actualiza antecedentes médicos, alergias y grupo sanguíneo de una Ficha Clínica.
     """
     ficha = get_object_or_404(FichaClinica, pk=ficha_id)
 
-    if request.method == 'POST':
-        form = FichaClinicaForm(request.POST, instance=ficha)
-        if form.is_valid():
-            form.save()
-            messages.success(request, "Antecedentes clínicos actualizados correctamente.")
-        else:
-            messages.error(request, "No se pudieron guardar los antecedentes. Verifique los datos.")
+    form = FichaClinicaForm(request.POST, instance=ficha)
+    if form.is_valid():
+        form.save()
+        messages.success(request, "Antecedentes clínicos actualizados correctamente.")
+    else:
+        for err_list in form.errors.values():
+            for err in err_list:
+                messages.error(request, err)
 
     return redirect('ficha_detalle', ficha_id=ficha.id)
 
 
 @login_required
 @rol_requerido(['Administrador', 'Profesional'])
+@require_POST
 def atencion_crear_view(request, ficha_id):
     """
     Registra una nueva atención/evolución clínica (tabla intermedia AtencionClinica)
@@ -485,38 +495,41 @@ def atencion_crear_view(request, ficha_id):
     """
     ficha = get_object_or_404(FichaClinica.objects.select_related('paciente'), pk=ficha_id)
 
-    if request.method == 'POST':
-        form = AtencionClinicaForm(request.POST, paciente=ficha.paciente, user=request.user)
-        if form.is_valid():
-            with transaction.atomic():
-                atencion = form.save(commit=False)
-                atencion.fichaClinica = ficha
+    form = AtencionClinicaForm(request.POST, paciente=ficha.paciente, user=request.user)
+    if form.is_valid():
+        with transaction.atomic():
+            atencion = form.save(commit=False)
+            atencion.fichaClinica = ficha
 
-                if request.user.es_profesional and hasattr(request.user, 'profesional'):
-                    atencion.profesional = request.user.profesional
+            if atencion.cita_id:
+                cita_locked = Cita.objects.select_for_update().filter(pk=atencion.cita_id).first()
+                if cita_locked and AtencionClinica.objects.filter(cita=cita_locked).exists():
+                    messages.error(request, "Esta cita ya tiene una atención clínica registrada.")
+                    return redirect('ficha_detalle', ficha_id=ficha.id)
 
-                atencion.save()
+            if request.user.es_profesional and hasattr(request.user, 'profesional'):
+                atencion.profesional = request.user.profesional
 
-                if atencion.cita:
-                    atencion.cita.estado = 'Realizada'
-                    atencion.cita.save(update_fields=['estado'])
+            atencion.save()
 
-            messages.success(request, "Atención clínica registrada exitosamente en la ficha del paciente.")
-            return redirect('ficha_detalle', ficha_id=ficha.id)
-        else:
-            # Renderizar la ficha con los errores del formulario de atención
-            atenciones = ficha.atenciones.select_related('profesional', 'cita').order_by('-fechaHora')
-            return render(request, 'fichas/detalle.html', {
-                'ficha': ficha,
-                'paciente': ficha.paciente,
-                'atenciones': atenciones,
-                'es_clinico': True,
-                'ficha_form': FichaClinicaForm(instance=ficha),
-                'atencion_form': form,
-                'abrir_modal_atencion': True,
-            })
+            if atencion.cita:
+                atencion.cita.estado = 'Realizada'
+                atencion.cita.save(update_fields=['estado'])
 
-    return redirect('ficha_detalle', ficha_id=ficha.id)
+        messages.success(request, "Atención clínica registrada exitosamente en la ficha del paciente.")
+        return redirect('ficha_detalle', ficha_id=ficha.id)
+
+    # Renderizar la ficha con los errores del formulario de atención
+    atenciones = ficha.atenciones.select_related('profesional', 'cita').order_by('-fechaHora')
+    return render(request, 'fichas/detalle.html', {
+        'ficha': ficha,
+        'paciente': ficha.paciente,
+        'atenciones': atenciones,
+        'es_clinico': True,
+        'ficha_form': FichaClinicaForm(instance=ficha),
+        'atencion_form': form,
+        'abrir_modal_atencion': True,
+    })
 
 
 @login_required
@@ -577,15 +590,46 @@ def agendamiento_view(request):
         if cita_form.is_valid():
             with transaction.atomic():
                 paciente = cita_form.cleaned_data['paciente']
+                profesional = cita_form.cleaned_data['profesional']
+                inicio = cita_form.cleaned_data['fechaHoraInicio']
+                fin = cita_form.cleaned_data['fechaHoraFin']
+
                 # Seguridad adicional: un paciente solo agenda para sí mismo
                 if user.es_paciente and hasattr(user, 'paciente'):
                     paciente = user.paciente
 
+                # Revalidación atómica anti-colisiones dentro de la transacción
+                colision_prof = Cita.objects.select_for_update().filter(
+                    profesional=profesional,
+                    fechaHoraInicio__lt=fin,
+                    fechaHoraFin__gt=inicio,
+                ).exclude(estado='Cancelada').exists()
+
+                colision_bloq = BloqueoHorario.objects.select_for_update().filter(
+                    profesional=profesional,
+                    estado='Activo',
+                    fechaHoraInicio__lt=fin,
+                    fechaHoraFin__gt=inicio,
+                ).exists()
+
+                colision_pac = Cita.objects.select_for_update().filter(
+                    paciente=paciente,
+                    fechaHoraInicio__lt=fin,
+                    fechaHoraFin__gt=inicio,
+                ).exclude(estado='Cancelada').exists()
+
+                if colision_prof or colision_bloq or colision_pac:
+                    messages.error(
+                        request,
+                        "El bloque horario seleccionado acaba de ser ocupado. Seleccione otro horario disponible."
+                    )
+                    return redirect('agendamiento')
+
                 cita = Cita.objects.create(
                     paciente=paciente,
-                    profesional=cita_form.cleaned_data['profesional'],
-                    fechaHoraInicio=cita_form.cleaned_data['fechaHoraInicio'],
-                    fechaHoraFin=cita_form.cleaned_data['fechaHoraFin'],
+                    profesional=profesional,
+                    fechaHoraInicio=inicio,
+                    fechaHoraFin=fin,
                     estado='Agendada',
                 )
 
@@ -609,16 +653,21 @@ def agendamiento_view(request):
                 messages.error(request, error)
     else:
         initial_cita = {}
-        paciente_q = request.GET.get('paciente_id')
+        paciente_q = parse_positive_int(request.GET.get('paciente_id'))
         if paciente_q and user.es_staff_clinico:
             initial_cita['paciente'] = paciente_q
         cita_form = CitaForm(user=user, initial=initial_cita)
 
-    # Filtros de listado
-    fecha_filtro = request.GET.get('fecha', '').strip()
-    profesional_filtro = request.GET.get('profesional', '').strip()
-    estado_filtro = request.GET.get('estado', '').strip()
+    # Filtros de listado validados y acotados
+    fecha_raw = request.GET.get('fecha', '').strip()[:10]
+    profesional_raw = request.GET.get('profesional', '').strip()[:20]
+    estado_raw = request.GET.get('estado', '').strip()[:30]
     ver_todas = request.GET.get('ver') == 'todas'
+
+    fecha_filtro = ''
+    profesional_id_filtro = parse_positive_int(profesional_raw) if profesional_raw else None
+    profesional_filtro = str(profesional_id_filtro) if profesional_id_filtro else ''
+    estado_filtro = estado_raw if estado_raw in ESTADOS_CITA_VALIDOS else ''
 
     citas_qs = Cita.objects.select_related(
         'paciente', 'paciente__usuario', 'profesional', 'videoconsulta', 'atencion_clinica'
@@ -626,12 +675,13 @@ def agendamiento_view(request):
 
     if user.es_paciente and hasattr(user, 'paciente'):
         citas_qs = citas_qs.filter(paciente=user.paciente)
-    elif user.es_profesional and hasattr(user, 'profesional') and not profesional_filtro:
+    elif user.es_profesional and hasattr(user, 'profesional') and not profesional_id_filtro:
         citas_qs = citas_qs.filter(profesional=user.profesional)
 
-    if fecha_filtro:
+    if fecha_raw:
         try:
-            fecha_dt = datetime.strptime(fecha_filtro, '%Y-%m-%d').date()
+            fecha_dt = datetime.strptime(fecha_raw, '%Y-%m-%d').date()
+            fecha_filtro = fecha_dt.strftime('%Y-%m-%d')
             tz = timezone.get_current_timezone()
             inicio_dia = timezone.make_aware(datetime.combine(fecha_dt, time.min), tz)
             fin_dia = timezone.make_aware(datetime.combine(fecha_dt, time.max), tz)
@@ -646,11 +696,16 @@ def agendamiento_view(request):
         )
         citas_qs = citas_qs.filter(fechaHoraInicio__gte=inicio_hoy)
 
-    if profesional_filtro and not user.es_paciente:
-        citas_qs = citas_qs.filter(profesional_id=profesional_filtro)
+    if not user.es_paciente:
+        if profesional_id_filtro:
+            citas_qs = citas_qs.filter(profesional_id=profesional_id_filtro)
+        elif profesional_raw:
+            citas_qs = citas_qs.none()
 
     if estado_filtro:
         citas_qs = citas_qs.filter(estado=estado_filtro)
+    elif estado_raw:
+        citas_qs = citas_qs.none()
 
     # Bloqueos horarios visibles para el equipo clínico
     bloqueos = BloqueoHorario.objects.none()
@@ -678,52 +733,58 @@ def agendamiento_view(request):
 
 
 @login_required
+@require_POST
 def cita_cambiar_estado_view(request, cita_id):
     """
     Actualiza el estado de una cita (Confirmada, En atención, Realizada, Cancelada)
-    verificando los permisos del rol actual.
+    verificando los permisos del rol actual y transiciones válidas.
     """
     cita = get_object_or_404(Cita.objects.select_related('paciente', 'profesional'), pk=cita_id)
 
-    if request.method == 'POST':
-        nuevo_estado = request.POST.get('estado')
-        estados_validos = ['Agendada', 'Confirmada', 'En atención', 'Realizada', 'Cancelada']
+    nuevo_estado = (request.POST.get('estado') or '').strip()
+    if nuevo_estado not in ESTADOS_CITA_VALIDOS:
+        messages.error(request, "Estado de cita no válido.")
+        return redirect('agendamiento')
 
-        if nuevo_estado not in estados_validos:
-            messages.error(request, "Estado de cita no válido.")
-            return redirect('agendamiento')
+    user = request.user
+    autorizado = False
 
-        user = request.user
-        autorizado = False
-
-        if user.es_administrador or user.es_recepcionista:
+    if user.es_administrador or user.es_recepcionista:
+        autorizado = True
+    elif user.es_profesional and hasattr(user, 'profesional') and cita.profesional_id == user.profesional.id:
+        autorizado = True
+    elif user.es_paciente and hasattr(user, 'paciente') and cita.paciente_id == user.paciente.id:
+        # Un paciente solo puede cancelar sus propias citas futuras pendientes
+        if (
+            nuevo_estado == 'Cancelada'
+            and cita.estado in ['Agendada', 'Confirmada']
+            and cita.fechaHoraInicio > timezone.now()
+        ):
             autorizado = True
-        elif user.es_profesional and hasattr(user, 'profesional') and cita.profesional_id == user.profesional.id:
-            autorizado = True
-        elif user.es_paciente and hasattr(user, 'paciente') and cita.paciente_id == user.paciente.id:
-            # Un paciente solo puede cancelar sus propias citas pendientes
-            if nuevo_estado == 'Cancelada' and cita.estado in ['Agendada', 'Confirmada']:
-                autorizado = True
 
-        if not autorizado:
-            messages.warning(request, "No tienes permisos para realizar esta acción sobre la cita.")
-            return redirect('agendamiento')
+    if not autorizado:
+        messages.warning(request, "No tienes permisos para realizar esta acción sobre la cita.")
+        return redirect('agendamiento')
 
-        cita.estado = nuevo_estado
-        cita.save(update_fields=['estado'])
+    if cita.estado == 'Realizada' and nuevo_estado in ['Agendada', 'Confirmada']:
+        messages.warning(request, "Una cita ya realizada no puede revertirse a un estado previo.")
+        return redirect('agendamiento')
 
-        if nuevo_estado == 'Confirmada':
-            enviar_notificacion_cita(cita, tipo='Confirmación', notificar_profesional=False)
-        elif nuevo_estado == 'Cancelada':
-            enviar_notificacion_cita(cita, tipo='Cancelación', notificar_profesional=True)
+    cita.estado = nuevo_estado
+    cita.save(update_fields=['estado'])
 
-        messages.success(request, f"Cita #{cita.id} actualizada a estado '{nuevo_estado}'.")
+    if nuevo_estado == 'Confirmada':
+        enviar_notificacion_cita(cita, tipo='Confirmación', notificar_profesional=False)
+    elif nuevo_estado == 'Cancelada':
+        enviar_notificacion_cita(cita, tipo='Cancelación', notificar_profesional=True)
 
+    messages.success(request, f"Cita #{cita.id} actualizada a estado '{nuevo_estado}'.")
     return redirect('agendamiento')
 
 
 @login_required
 @rol_requerido(['Administrador', 'Profesional', 'Recepcionista'])
+@require_POST
 def cita_enviar_recordatorio_view(request, cita_id):
     """
     Envía manualmente un recordatorio por correo electrónico al paciente de una cita activa.
@@ -733,83 +794,103 @@ def cita_enviar_recordatorio_view(request, cita_id):
         pk=cita_id
     )
 
-    if request.method == 'POST':
-        if request.user.es_profesional and hasattr(request.user, 'profesional'):
-            if cita.profesional_id != request.user.profesional.id:
-                messages.warning(request, "Solo puedes enviar recordatorios de tus propias citas.")
-                return redirect('agendamiento')
-
-        if cita.estado == 'Cancelada':
-            messages.error(request, "No se puede enviar recordatorio para una cita cancelada.")
+    if request.user.es_profesional and hasattr(request.user, 'profesional'):
+        if cita.profesional_id != request.user.profesional.id:
+            messages.warning(request, "Solo puedes enviar recordatorios de tus propias citas.")
             return redirect('agendamiento')
 
-        res = enviar_notificacion_cita(cita, tipo='Recordatorio', notificar_profesional=False)
-        if res['enviado_paciente']:
-            messages.success(request, f"Recordatorio enviado a {res['email_paciente']} para la Cita #{cita.id}.")
-        elif not res['email_paciente']:
-            messages.warning(
-                request,
-                f"El paciente {cita.paciente.nombres} {cita.paciente.apellidos} no tiene cuenta con correo electrónico registrada."
-            )
-        else:
-            messages.error(request, "No fue posible enviar el recordatorio por correo electrónico.")
+    if cita.estado == 'Cancelada':
+        messages.error(request, "No se puede enviar recordatorio para una cita cancelada.")
+        return redirect('agendamiento')
+
+    res = enviar_notificacion_cita(cita, tipo='Recordatorio', notificar_profesional=False)
+    if res['enviado_paciente']:
+        messages.success(request, f"Recordatorio enviado a {res['email_paciente']} para la Cita #{cita.id}.")
+    elif not res['email_paciente']:
+        messages.warning(
+            request,
+            f"El paciente {cita.paciente.nombres} {cita.paciente.apellidos} no tiene cuenta con correo electrónico registrada."
+        )
+    else:
+        messages.error(request, "No fue posible enviar el recordatorio por correo electrónico.")
 
     return redirect('agendamiento')
 
 
 @login_required
 @rol_requerido(['Administrador', 'Profesional', 'Recepcionista'])
+@require_POST
 def bloqueo_crear_view(request):
     """
-    Registra un nuevo bloqueo horario para un especialista validando que no
-    colisione con citas ya agendadas.
+    Registra un nuevo bloqueo horario para un especialista validando atómicamente
+    que no colisione con citas ya agendadas u otros bloqueos activos.
     """
-    if request.method == 'POST':
-        form = BloqueoHorarioForm(request.POST, user=request.user)
-        if form.is_valid():
+    form = BloqueoHorarioForm(request.POST, user=request.user)
+    if form.is_valid():
+        with transaction.atomic():
             profesional = form.cleaned_data['profesional']
             if request.user.es_profesional and hasattr(request.user, 'profesional'):
                 profesional = request.user.profesional
 
-            bloqueo = BloqueoHorario.objects.create(
+            inicio = form.cleaned_data['fechaHoraInicio']
+            fin = form.cleaned_data['fechaHoraFin']
+
+            hay_citas = Cita.objects.select_for_update().filter(
                 profesional=profesional,
-                fechaHoraInicio=form.cleaned_data['fechaHoraInicio'],
-                fechaHoraFin=form.cleaned_data['fechaHoraFin'],
+                fechaHoraInicio__lt=fin,
+                fechaHoraFin__gt=inicio,
+            ).exclude(estado='Cancelada').exists()
+
+            hay_bloqueo = BloqueoHorario.objects.select_for_update().filter(
+                profesional=profesional,
+                estado='Activo',
+                fechaHoraInicio__lt=fin,
+                fechaHoraFin__gt=inicio,
+            ).exists()
+
+            if hay_citas or hay_bloqueo:
+                messages.error(request, "El tramo horario seleccionado colisiona con una cita o bloqueo activo.")
+                return redirect('agendamiento')
+
+            BloqueoHorario.objects.create(
+                profesional=profesional,
+                fechaHoraInicio=inicio,
+                fechaHoraFin=fin,
                 motivo=form.cleaned_data.get('motivo') or 'Bloqueo de agenda',
                 estado='Activo',
             )
-            messages.success(
-                request,
-                f"Bloqueo registrado para {profesional.nombres} {profesional.apellidos}."
-            )
-        else:
-            for error in form.non_field_errors():
-                messages.error(request, error)
-            for field, errors in form.errors.items():
-                if field != '__all__':
-                    for err in errors:
-                        messages.error(request, err)
+        messages.success(
+            request,
+            f"Bloqueo registrado para {profesional.nombres} {profesional.apellidos}."
+        )
+    else:
+        for error in form.non_field_errors():
+            messages.error(request, error)
+        for field, errors in form.errors.items():
+            if field != '__all__':
+                for err in errors:
+                    messages.error(request, err)
 
     return redirect('agendamiento')
 
 
 @login_required
 @rol_requerido(['Administrador', 'Profesional', 'Recepcionista'])
+@require_POST
 def bloqueo_eliminar_view(request, bloqueo_id):
     """
     Desactiva/elimina un bloqueo horario existente.
     """
     bloqueo = get_object_or_404(BloqueoHorario, pk=bloqueo_id)
 
-    if request.method == 'POST':
-        if request.user.es_profesional and hasattr(request.user, 'profesional'):
-            if bloqueo.profesional_id != request.user.profesional.id:
-                messages.warning(request, "Solo puedes eliminar tus propios bloqueos horarios.")
-                return redirect('agendamiento')
+    if request.user.es_profesional and hasattr(request.user, 'profesional'):
+        if bloqueo.profesional_id != request.user.profesional.id:
+            messages.warning(request, "Solo puedes eliminar tus propios bloqueos horarios.")
+            return redirect('agendamiento')
 
-        bloqueo.estado = 'Inactivo'
-        bloqueo.save(update_fields=['estado'])
-        messages.info(request, "Bloqueo horario eliminado correctamente.")
+    bloqueo.estado = 'Inactivo'
+    bloqueo.save(update_fields=['estado'])
+    messages.info(request, "Bloqueo horario eliminado correctamente.")
 
     return redirect('agendamiento')
 
@@ -820,11 +901,15 @@ def disponibilidad_json_view(request):
     Endpoint JSON para consultar bloques ocupados (citas activas y bloqueos) de un profesional
     en una fecha específica, sin exponer datos privados de otros pacientes.
     """
-    profesional_id = request.GET.get('profesional_id')
-    fecha_str = request.GET.get('fecha')
+    prof_raw = (request.GET.get('profesional_id') or '').strip()
+    fecha_str = (request.GET.get('fecha') or '').strip()[:10]
 
-    if not profesional_id or not fecha_str:
+    if not prof_raw or not fecha_str:
         return JsonResponse({'ocupados': []})
+
+    profesional_id = parse_positive_int(prof_raw)
+    if not profesional_id:
+        return JsonResponse({'ocupados': [], 'error': 'Profesional inválido'}, status=400)
 
     try:
         fecha_dt = datetime.strptime(fecha_str, '%Y-%m-%d').date()
@@ -922,6 +1007,10 @@ def telemedicina_sala_view(request, videoconsulta_id):
         return redirect('telemedicina')
 
     cita = videoconsulta.cita
+    if cita.estado == 'Cancelada':
+        messages.warning(request, "No es posible ingresar a la sala porque la cita asociada fue cancelada.")
+        return redirect('telemedicina')
+
     ficha, _ = FichaClinica.objects.get_or_create(paciente=cita.paciente)
     es_clinico = request.user.es_administrador or request.user.es_profesional
     atencion_existente = AtencionClinica.objects.filter(cita=cita).first()
@@ -1008,6 +1097,7 @@ def telemedicina_sala_view(request, videoconsulta_id):
 
 
 @login_required
+@require_POST
 def telemedicina_estado_view(request, videoconsulta_id):
     """
     Actualiza el estado de conexión de una sala WebRTC (En espera, En curso, Finalizada).
@@ -1016,40 +1106,43 @@ def telemedicina_estado_view(request, videoconsulta_id):
     if not _usuario_autorizado_sala(request.user, videoconsulta):
         return JsonResponse({'ok': False, 'error': 'No autorizado'}, status=403)
 
-    if request.method == 'POST':
-        nuevo_estado = request.POST.get('estadoConexion')
-        if not nuevo_estado and request.body:
-            try:
-                body = json.loads(request.body.decode('utf-8'))
+    if videoconsulta.cita.estado == 'Cancelada':
+        return JsonResponse({'ok': False, 'error': 'La cita asociada fue cancelada'}, status=409)
+
+    nuevo_estado = request.POST.get('estadoConexion')
+    if not nuevo_estado and request.body and len(request.body) <= 4096:
+        try:
+            body = json.loads(request.body.decode('utf-8'))
+            if isinstance(body, dict):
                 nuevo_estado = body.get('estadoConexion')
-            except (ValueError, UnicodeDecodeError):
-                pass
+        except (ValueError, UnicodeDecodeError):
+            pass
 
-        estados_validos = ['Pendiente', 'En espera', 'En curso', 'Finalizada']
-        if nuevo_estado not in estados_validos:
-            return JsonResponse({'ok': False, 'error': 'Estado inválido'}, status=400)
+    estados_validos = ['Pendiente', 'En espera', 'En curso', 'Finalizada']
+    if nuevo_estado not in estados_validos:
+        return JsonResponse({'ok': False, 'error': 'Estado inválido'}, status=400)
 
-        # Solo el profesional o administrador puede admitir ('En curso') o finalizar
-        es_clinico = request.user.es_administrador or request.user.es_profesional
-        if nuevo_estado in ['En curso', 'Finalizada'] and not es_clinico:
-            return JsonResponse({'ok': False, 'error': 'Solo el profesional puede iniciar o finalizar la sesión'}, status=403)
+    # Solo el profesional o administrador puede admitir ('En curso') o finalizar
+    es_clinico = request.user.es_administrador or request.user.es_profesional
+    if nuevo_estado in ['En curso', 'Finalizada'] and not es_clinico:
+        return JsonResponse({'ok': False, 'error': 'Solo el profesional puede iniciar o finalizar la sesión'}, status=403)
 
-        videoconsulta.estadoConexion = nuevo_estado
-        videoconsulta.save(update_fields=['estadoConexion'])
+    videoconsulta.estadoConexion = nuevo_estado
+    videoconsulta.save(update_fields=['estadoConexion'])
 
-        if nuevo_estado == 'En curso' and videoconsulta.cita.estado in ['Agendada', 'Confirmada']:
-            videoconsulta.cita.estado = 'En atención'
+    if nuevo_estado == 'En curso' and videoconsulta.cita.estado in ['Agendada', 'Confirmada']:
+        videoconsulta.cita.estado = 'En atención'
+        videoconsulta.cita.save(update_fields=['estado'])
+    elif nuevo_estado == 'Finalizada':
+        cache.delete(f"webrtc_room_{videoconsulta.id}")
+        if videoconsulta.cita.estado == 'En atención':
+            videoconsulta.cita.estado = 'Realizada'
             videoconsulta.cita.save(update_fields=['estado'])
-        elif nuevo_estado == 'Finalizada':
-            cache.delete(f"webrtc_room_{videoconsulta.id}")
-            if videoconsulta.cita.estado == 'En atención':
-                videoconsulta.cita.estado = 'Realizada'
-                videoconsulta.cita.save(update_fields=['estado'])
 
-        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-            return JsonResponse({'ok': True, 'estadoConexion': videoconsulta.estadoConexion})
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        return JsonResponse({'ok': True, 'estadoConexion': videoconsulta.estadoConexion})
 
-        messages.info(request, f"Estado de sala actualizado a '{nuevo_estado}'.")
+    messages.info(request, f"Estado de sala actualizado a '{nuevo_estado}'.")
     return redirect('telemedicina_sala', videoconsulta_id=videoconsulta.id)
 
 
@@ -1057,11 +1150,14 @@ def telemedicina_estado_view(request, videoconsulta_id):
 def telemedicina_senal_view(request, videoconsulta_id):
     """
     Endpoint de señalización WebRTC (SDP Offer/Answer + ICE Candidates) mediante Django cache
-    para conectar videollamadas P2P entre profesional (host) y paciente (guest) sin servidores externos.
+    con validación estricta de tamaño, estructura y rol para evitar DoS o inyección de señalización.
     """
     videoconsulta = get_object_or_404(Videoconsulta.objects.select_related('cita'), pk=videoconsulta_id)
     if not _usuario_autorizado_sala(request.user, videoconsulta):
         return JsonResponse({'ok': False, 'error': 'No autorizado'}, status=403)
+
+    if videoconsulta.cita.estado == 'Cancelada':
+        return JsonResponse({'ok': False, 'error': 'La cita asociada fue cancelada'}, status=409)
 
     cache_key = f"webrtc_room_{videoconsulta.id}"
     room_data = cache.get(cache_key) or {
@@ -1076,33 +1172,60 @@ def telemedicina_senal_view(request, videoconsulta_id):
     rol_local = 'host' if (request.user.es_administrador or request.user.es_profesional) else 'guest'
 
     if request.method == 'POST':
+        if len(request.body) > 65536:
+            return JsonResponse({'ok': False, 'error': 'Payload de señalización excede el límite permitido.'}, status=413)
+
         try:
             payload = json.loads(request.body.decode('utf-8'))
         except (ValueError, UnicodeDecodeError):
             return JsonResponse({'ok': False, 'error': 'JSON inválido'}, status=400)
 
+        if not isinstance(payload, dict):
+            return JsonResponse({'ok': False, 'error': 'Formato de señal inválido (se esperaba un objeto JSON).'}, status=400)
+
         tipo = payload.get('type')
-        if tipo in ['offer', 'answer', 'ice'] and videoconsulta.estadoConexion != 'En curso':
+        if tipo not in ('reset', 'presence', 'offer', 'answer', 'ice'):
+            return JsonResponse({'ok': False, 'error': 'Tipo de señal WebRTC no válido.'}, status=400)
+
+        if tipo in ('offer', 'answer', 'ice') and videoconsulta.estadoConexion != 'En curso':
             return JsonResponse({
                 'ok': False,
                 'error': 'Sala de espera activa: la señalización WebRTC inicia cuando el especialista admite al paciente.'
             }, status=409)
 
         if tipo == 'reset':
-            room_data = {'offer': None, 'answer': None, 'host_ice': [], 'guest_ice': [], 'host_online': False, 'guest_online': False}
+            if rol_local != 'host':
+                return JsonResponse({'ok': False, 'error': 'Solo el profesional puede reiniciar la señalización.'}, status=403)
+            if videoconsulta.estadoConexion != 'En curso':
+                return JsonResponse({'ok': False, 'error': 'La sala debe estar en curso para reiniciar la señalización.'}, status=409)
+            room_data = {'offer': None, 'answer': None, 'host_ice': [], 'guest_ice': [], 'host_online': True, 'guest_online': False}
         elif tipo == 'presence':
             room_data[f'{rol_local}_online'] = True
-        elif tipo == 'offer' and rol_local == 'host':
-            room_data['offer'] = payload.get('sdp')
+        elif tipo == 'offer':
+            if rol_local != 'host':
+                return JsonResponse({'ok': False, 'error': 'Solo el profesional puede emitir offer.'}, status=403)
+            sdp = payload.get('sdp')
+            if not isinstance(sdp, dict) or sdp.get('type') != 'offer' or not isinstance(sdp.get('sdp'), str) or len(sdp['sdp']) > 32768:
+                return JsonResponse({'ok': False, 'error': 'SDP offer inválido o excede límite de caracteres.'}, status=400)
+            room_data['offer'] = {'type': 'offer', 'sdp': sdp['sdp']}
             room_data['answer'] = None
             room_data['host_ice'] = []
             room_data['guest_ice'] = []
-        elif tipo == 'answer' and rol_local == 'guest':
-            room_data['answer'] = payload.get('sdp')
+        elif tipo == 'answer':
+            if rol_local != 'guest':
+                return JsonResponse({'ok': False, 'error': 'Solo el paciente puede emitir answer.'}, status=403)
+            sdp = payload.get('sdp')
+            if not isinstance(sdp, dict) or sdp.get('type') != 'answer' or not isinstance(sdp.get('sdp'), str) or len(sdp['sdp']) > 32768:
+                return JsonResponse({'ok': False, 'error': 'SDP answer inválido o excede límite de caracteres.'}, status=400)
+            room_data['answer'] = {'type': 'answer', 'sdp': sdp['sdp']}
         elif tipo == 'ice':
             cand = payload.get('candidate')
-            if cand:
-                room_data[f'{rol_local}_ice'].append(cand)
+            if not isinstance(cand, dict) or not isinstance(cand.get('candidate'), str) or len(json.dumps(cand)) > 2048:
+                return JsonResponse({'ok': False, 'error': 'Candidato ICE inválido.'}, status=400)
+            ice_list = room_data.setdefault(f'{rol_local}_ice', [])
+            if len(ice_list) >= 50:
+                return JsonResponse({'ok': False, 'error': 'Límite de candidatos ICE excedido.'}, status=429)
+            ice_list.append(cand)
 
         cache.set(cache_key, room_data, timeout=3600)
         return JsonResponse({'ok': True})
@@ -1127,6 +1250,38 @@ def telemedicina_senal_view(request, videoconsulta_id):
 # Módulo 5: Caja, Pagos y Liquidaciones
 # ==============================================================================
 
+def _aplicar_filtros_caja(request, pagos_qs):
+    tz = timezone.get_current_timezone()
+    fecha_raw = request.GET.get('fecha', '').strip()[:10]
+    estado_raw = request.GET.get('estado', '').strip()[:30]
+    metodo_raw = request.GET.get('metodo', '').strip()[:30]
+
+    fecha_filtro = ''
+    if fecha_raw:
+        try:
+            f_dt = datetime.strptime(fecha_raw, '%Y-%m-%d').date()
+            fecha_filtro = f_dt.strftime('%Y-%m-%d')
+            ini_d = timezone.make_aware(datetime.combine(f_dt, time.min), tz)
+            fin_d = timezone.make_aware(datetime.combine(f_dt, time.max), tz)
+            pagos_qs = pagos_qs.filter(fechaPago__gte=ini_d, fechaPago__lte=fin_d)
+        except ValueError:
+            pass
+
+    estado_filtro = estado_raw if estado_raw in ESTADOS_PAGO_VALIDOS else ''
+    if estado_filtro:
+        pagos_qs = pagos_qs.filter(estado=estado_filtro)
+    elif estado_raw:
+        pagos_qs = pagos_qs.none()
+
+    metodo_filtro = metodo_raw if metodo_raw in METODOS_PAGO_VALIDOS else ''
+    if metodo_filtro:
+        pagos_qs = pagos_qs.filter(metodoPago=metodo_filtro)
+    elif metodo_raw:
+        pagos_qs = pagos_qs.none()
+
+    return pagos_qs, fecha_filtro, estado_filtro, metodo_filtro
+
+
 @login_required
 def caja_view(request):
     """
@@ -1145,14 +1300,24 @@ def caja_view(request):
 
         form = PagoForm(request.POST)
         if form.is_valid():
-            pago = form.save(commit=False)
-            pago.registradoPor = user
-            if not pago.numeroComprobante:
-                fecha_tag = timezone.localtime().strftime('%Y%m%d')
-                ultimo_id = Pago.objects.order_by('-id').values_list('id', flat=True).first() or 0
-                correlativo = ultimo_id + 1
-                pago.numeroComprobante = f"CMP-{fecha_tag}-{correlativo:04d}"
-            pago.save()
+            with transaction.atomic():
+                cita_locked = Cita.objects.select_for_update().get(pk=form.cleaned_data['cita'].pk)
+                if cita_locked.estado == 'Cancelada':
+                    messages.error(request, "No es posible registrar cobros sobre una cita cancelada.")
+                    return redirect('caja')
+                if form.cleaned_data['estado'] == 'Pagado' and cita_locked.pagos.filter(estado='Pagado').exists():
+                    messages.error(request, f"La Cita #{cita_locked.id} ya registra un pago confirmado.")
+                    return redirect('caja')
+
+                pago = form.save(commit=False)
+                pago.registradoPor = user
+                if not pago.numeroComprobante:
+                    fecha_tag = timezone.localtime().strftime('%Y%m%d')
+                    ultimo_id = Pago.objects.select_for_update().order_by('-id').values_list('id', flat=True).first() or 0
+                    correlativo = ultimo_id + 1
+                    pago.numeroComprobante = f"CMP-{fecha_tag}-{correlativo:04d}"
+                pago.save()
+
             messages.success(
                 request,
                 f"Pago #{pago.id} (${int(pago.monto):,}) registrado con comprobante {pago.numeroComprobante}."
@@ -1164,7 +1329,7 @@ def caja_view(request):
                     messages.error(request, err)
     else:
         initial_pago = {}
-        cita_q = request.GET.get('cita_id')
+        cita_q = parse_positive_int(request.GET.get('cita_id'))
         if cita_q and puede_cobrar:
             initial_pago['cita'] = cita_q
         form = PagoForm(initial=initial_pago) if puede_cobrar else None
@@ -1175,10 +1340,6 @@ def caja_view(request):
     inicio_hoy = timezone.make_aware(datetime.combine(hoy, time.min), tz)
     fin_hoy = timezone.make_aware(datetime.combine(hoy, time.max), tz)
     inicio_mes = timezone.make_aware(datetime.combine(hoy.replace(day=1), time.min), tz)
-
-    fecha_filtro = request.GET.get('fecha', '').strip()
-    estado_filtro = request.GET.get('estado', '').strip()
-    metodo_filtro = request.GET.get('metodo', '').strip()
 
     try:
         comision_pct = int(request.GET.get('comision', 30))
@@ -1196,19 +1357,7 @@ def caja_view(request):
     elif user.es_profesional:
         pagos_qs = pagos_qs.filter(cita__profesional=user.profesional) if hasattr(user, 'profesional') else Pago.objects.none()
 
-    if fecha_filtro:
-        try:
-            f_dt = datetime.strptime(fecha_filtro, '%Y-%m-%d').date()
-            ini_d = timezone.make_aware(datetime.combine(f_dt, time.min), tz)
-            fin_d = timezone.make_aware(datetime.combine(f_dt, time.max), tz)
-            pagos_qs = pagos_qs.filter(fechaPago__gte=ini_d, fechaPago__lte=fin_d)
-        except ValueError:
-            pass
-
-    if estado_filtro:
-        pagos_qs = pagos_qs.filter(estado=estado_filtro)
-    if metodo_filtro:
-        pagos_qs = pagos_qs.filter(metodoPago=metodo_filtro)
+    pagos_qs, fecha_filtro, estado_filtro, metodo_filtro = _aplicar_filtros_caja(request, pagos_qs)
 
     # Totales (respetando alcance del rol)
     pagos_alcance = Pago.objects.all()
@@ -1287,21 +1436,26 @@ def caja_view(request):
 
 @login_required
 @rol_requerido(['Administrador', 'Recepcionista'])
+@require_POST
 def pago_cambiar_estado_view(request, pago_id):
     """
     Permite confirmar un pago pendiente ('Pagado') o anular un registro ('Anulado').
     """
     pago = get_object_or_404(Pago, pk=pago_id)
-    if request.method == 'POST':
-        nuevo_estado = request.POST.get('estado')
-        if nuevo_estado in ['Pagado', 'Anulado', 'Pendiente']:
-            pago.estado = nuevo_estado
+    nuevo_estado = (request.POST.get('estado') or '').strip()
+    if nuevo_estado in ESTADOS_PAGO_VALIDOS:
+        with transaction.atomic():
+            pago_locked = Pago.objects.select_for_update().select_related('cita').get(pk=pago.pk)
+            if nuevo_estado == 'Pagado' and pago_locked.cita.pagos.filter(estado='Pagado').exclude(pk=pago_locked.pk).exists():
+                messages.error(request, f"La Cita #{pago_locked.cita_id} ya tiene otro pago confirmado.")
+                return redirect('caja')
+            pago_locked.estado = nuevo_estado
             if nuevo_estado == 'Pagado':
-                pago.fechaPago = timezone.now()
-            pago.save(update_fields=['estado', 'fechaPago'])
-            messages.success(request, f"Pago #{pago.id} actualizado a '{nuevo_estado}'.")
-        else:
-            messages.error(request, "Estado de pago inválido.")
+                pago_locked.fechaPago = timezone.now()
+            pago_locked.save(update_fields=['estado', 'fechaPago'])
+        messages.success(request, f"Pago #{pago.id} actualizado a '{nuevo_estado}'.")
+    else:
+        messages.error(request, "Estado de pago inválido.")
     return redirect('caja')
 
 
@@ -1332,30 +1486,15 @@ def pago_comprobante_view(request, pago_id):
 @rol_requerido(['Administrador', 'Recepcionista', 'Profesional'])
 def caja_exportar_csv_view(request):
     """
-    Exporta el detalle de pagos en formato CSV compatible con Excel (UTF-8 BOM).
+    Exporta el detalle de pagos en formato CSV compatible con Excel (UTF-8 BOM)
+    y sanitizado contra CSV Formula Injection (CWE-1236).
     """
     user = request.user
     pagos = Pago.objects.select_related('cita', 'cita__paciente', 'cita__profesional').order_by('-fechaPago')
     if user.es_profesional:
         pagos = pagos.filter(cita__profesional=user.profesional) if hasattr(user, 'profesional') else Pago.objects.none()
 
-    fecha_filtro = request.GET.get('fecha', '').strip()
-    estado_filtro = request.GET.get('estado', '').strip()
-    metodo_filtro = request.GET.get('metodo', '').strip()
-    tz = timezone.get_current_timezone()
-
-    if fecha_filtro:
-        try:
-            f_dt = datetime.strptime(fecha_filtro, '%Y-%m-%d').date()
-            ini_d = timezone.make_aware(datetime.combine(f_dt, time.min), tz)
-            fin_d = timezone.make_aware(datetime.combine(f_dt, time.max), tz)
-            pagos = pagos.filter(fechaPago__gte=ini_d, fechaPago__lte=fin_d)
-        except ValueError:
-            pass
-    if estado_filtro:
-        pagos = pagos.filter(estado=estado_filtro)
-    if metodo_filtro:
-        pagos = pagos.filter(metodoPago=metodo_filtro)
+    pagos, _, _, _ = _aplicar_filtros_caja(request, pagos)
 
     response = HttpResponse(content_type='text/csv; charset=utf-8-sig')
     response['Content-Disposition'] = f'attachment; filename="caja_centro_nodo_{timezone.localdate()}.csv"'
@@ -1365,15 +1504,15 @@ def caja_exportar_csv_view(request):
     for p in pagos:
         writer.writerow([
             p.id,
-            p.numeroComprobante or f"#{p.id}",
+            sanitizar_celda_csv(p.numeroComprobante or f"#{p.id}"),
             timezone.localtime(p.fechaPago).strftime('%d/%m/%Y %H:%M'),
-            f"{p.cita.paciente.nombres} {p.cita.paciente.apellidos}",
-            p.cita.paciente.rut,
-            f"{p.cita.profesional.nombres} {p.cita.profesional.apellidos}",
-            p.prevision,
-            p.metodoPago,
+            sanitizar_celda_csv(f"{p.cita.paciente.nombres} {p.cita.paciente.apellidos}"),
+            sanitizar_celda_csv(p.cita.paciente.rut),
+            sanitizar_celda_csv(f"{p.cita.profesional.nombres} {p.cita.profesional.apellidos}"),
+            sanitizar_celda_csv(p.prevision),
+            sanitizar_celda_csv(p.metodoPago),
             int(p.monto),
-            p.estado,
+            sanitizar_celda_csv(p.estado),
         ])
     return response
 
@@ -1386,11 +1525,6 @@ def caja_reporte_liquidacion_view(request):
     y liquidación de honorarios de especialistas.
     """
     user = request.user
-    tz = timezone.get_current_timezone()
-
-    fecha_filtro = request.GET.get('fecha', '').strip()
-    estado_filtro = request.GET.get('estado', '').strip()
-    metodo_filtro = request.GET.get('metodo', '').strip()
 
     try:
         comision_pct = int(request.GET.get('comision', 30))
@@ -1406,18 +1540,7 @@ def caja_reporte_liquidacion_view(request):
     if user.es_profesional:
         pagos_qs = pagos_qs.filter(cita__profesional=user.profesional) if hasattr(user, 'profesional') else Pago.objects.none()
 
-    if fecha_filtro:
-        try:
-            f_dt = datetime.strptime(fecha_filtro, '%Y-%m-%d').date()
-            ini_d = timezone.make_aware(datetime.combine(f_dt, time.min), tz)
-            fin_d = timezone.make_aware(datetime.combine(f_dt, time.max), tz)
-            pagos_qs = pagos_qs.filter(fechaPago__gte=ini_d, fechaPago__lte=fin_d)
-        except ValueError:
-            pass
-    if estado_filtro:
-        pagos_qs = pagos_qs.filter(estado=estado_filtro)
-    if metodo_filtro:
-        pagos_qs = pagos_qs.filter(metodoPago=metodo_filtro)
+    pagos_qs, fecha_filtro, estado_filtro, metodo_filtro = _aplicar_filtros_caja(request, pagos_qs)
 
     pagos_pagados = pagos_qs.filter(estado='Pagado')
     total_recaudado = pagos_pagados.aggregate(total=Sum('monto'))['total'] or Decimal('0')

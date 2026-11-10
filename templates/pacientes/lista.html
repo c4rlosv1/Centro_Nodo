@@ -13,7 +13,7 @@
 
 <div class="panel-card">
     <form method="GET" action="{% url 'pacientes_lista' %}" class="search-bar">
-        <input type="text" name="q" value="{{ query }}" class="form-control" placeholder="Buscar por RUT, nombre o apellido...">
+        <input type="text" name="q" value="{{ query }}" maxlength="80" class="form-control" placeholder="Buscar por RUT, nombre o apellido...">
         <button type="submit" class="btn btn-primary">Buscar</button>
         {% if query %}
             <a href="{% url 'pacientes_lista' %}" class="btn btn-secondary">Limpiar</a>

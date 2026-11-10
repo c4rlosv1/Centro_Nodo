@@ -329,12 +329,21 @@ footer {
     letter-spacing: 0.05em;
 }
 
+.logout-form {
+    display: inline;
+    margin: 0;
+}
+
 .btn-logout {
     color: #ef4444 !important;
+    background: transparent;
+    font-family: inherit;
+    font-weight: 500;
     font-size: 0.9rem;
     padding: 0.4rem 0.8rem;
     border: 1px solid rgba(239, 68, 68, 0.3);
     border-radius: 8px;
+    cursor: pointer;
     transition: all 0.2s ease;
 }
 

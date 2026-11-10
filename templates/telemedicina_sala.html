@@ -177,11 +177,17 @@
                     <div class="form-group">
                         <label for="{{ atencion_form.evolucionNotas.id_for_label }}">{{ atencion_form.evolucionNotas.label }}</label>
                         {{ atencion_form.evolucionNotas }}
+                        {% if atencion_form.evolucionNotas.errors %}
+                            <span class="field-error">{{ atencion_form.evolucionNotas.errors.0 }}</span>
+                        {% endif %}
                     </div>
 
                     <div class="form-group">
                         <label for="{{ atencion_form.indicacionesTratamiento.id_for_label }}">{{ atencion_form.indicacionesTratamiento.label }}</label>
                         {{ atencion_form.indicacionesTratamiento }}
+                        {% if atencion_form.indicacionesTratamiento.errors %}
+                            <span class="field-error">{{ atencion_form.indicacionesTratamiento.errors.0 }}</span>
+                        {% endif %}
                     </div>
 
                     <div id="ajax-save-status" class="ajax-save-status">
@@ -642,11 +648,19 @@ document.addEventListener('DOMContentLoaded', function() {
     const ajaxStatus = document.getElementById('ajax-save-status');
 
     if (liveForm && btnSaveLive) {
+        const setAjaxStatus = (text, color) => {
+            ajaxStatus.textContent = '';
+            const span = document.createElement('span');
+            span.style.color = color;
+            span.textContent = text;
+            ajaxStatus.appendChild(span);
+        };
+
         btnSaveLive.addEventListener('click', async function() {
             const formData = new FormData(liveForm);
             formData.set('accion_nota', 'guardar');
             btnSaveLive.disabled = true;
-            ajaxStatus.innerHTML = '<span style="color: var(--primary-color);">Guardando y cifrando nota clínica...</span>';
+            setAjaxStatus('Guardando y cifrando nota clínica...', 'var(--primary-color)');
 
             try {
                 const resp = await fetch(liveForm.action, {
@@ -657,13 +671,17 @@ document.addEventListener('DOMContentLoaded', function() {
                 const data = await resp.json();
                 if (resp.ok && data.ok) {
                     const hora = new Date().toLocaleTimeString('es-CL');
-                    ajaxStatus.innerHTML = `<span style="color: #4ade80;">✅ ${data.mensaje} (${hora})</span>`;
+                    setAjaxStatus(`✅ ${data.mensaje} (${hora})`, '#4ade80');
                 } else {
-                    const msg = data.error || 'Complete los campos obligatorios (Motivo de consulta y Diagnóstico).';
-                    ajaxStatus.innerHTML = `<span style="color: #f87171;">⚠️ ${msg}</span>`;
+                    let msg = data.error || 'Complete los campos obligatorios (Motivo de consulta y Diagnóstico).';
+                    if (data.errors && typeof data.errors === 'object') {
+                        const firstList = Object.values(data.errors).find(v => Array.isArray(v) && v.length > 0);
+                        if (firstList) msg = firstList[0];
+                    }
+                    setAjaxStatus(`⚠️ ${msg}`, '#f87171');
                 }
             } catch (err) {
-                ajaxStatus.innerHTML = '<span style="color: #f87171;">⚠️ Error de red al guardar la nota.</span>';
+                setAjaxStatus('⚠️ Error de red al guardar la nota.', '#f87171');
             } finally {
                 btnSaveLive.disabled = false;
             }

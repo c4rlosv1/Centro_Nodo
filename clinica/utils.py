@@ -37,7 +37,7 @@ def validar_rut(rut: str) -> bool:
     Retorna True si el RUT chileno es estructural y matemáticamente válido.
     """
     rut_limpio = limpiar_rut(rut)
-    if len(rut_limpio) < 2:
+    if len(rut_limpio) < 6 or len(rut_limpio) > 10:
         return False
 
     cuerpo = rut_limpio[:-1]
@@ -51,6 +51,33 @@ def validar_rut(rut: str) -> bool:
         return False
 
     return calcular_dv(cuerpo) == dv
+
+
+def sanitizar_celda_csv(valor) -> str:
+    """
+    Previene ataques de inyección de fórmulas en Excel/LibreOffice (CSV Injection / CWE-1236)
+    neutralizando prefijos '=', '+', '-', '@', tabulador y retorno de carro.
+    """
+    if valor is None:
+        return ''
+    texto = str(valor).replace('\r', ' ').replace('\n', ' ').strip()
+    if texto and texto[0] in ('=', '+', '-', '@', '\t'):
+        return f"'{texto}"
+    return texto
+
+
+def parse_positive_int(valor):
+    """
+    Convierte de forma segura parámetros de consulta en enteros positivos (>= 1).
+    Retorna None si el parámetro no es numérico válido (evita ValueError / HTTP 500).
+    """
+    if valor is None:
+        return None
+    texto = str(valor).strip()
+    if not texto.isdigit():
+        return None
+    numero = int(texto)
+    return numero if numero > 0 else None
 
 
 def formatear_rut(rut: str) -> str:

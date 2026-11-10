@@ -2,6 +2,7 @@ import json
 from io import StringIO
 from datetime import timedelta
 from decimal import Decimal
+from django.conf import settings
 from django.core import mail
 from django.core.cache import cache
 from django.core.management import call_command
@@ -1039,18 +1040,20 @@ class SuiteCompleta7FasesYSeguridadTests(TestCase):
             self.assertEqual(resp.status_code, 302, f"La ruta {ruta} debe exigir login")
             self.assertIn(reverse('login'), resp.url)
 
-        # Login por username
+        # Login por username; GET /logout/ rechazado (405) y POST /logout/ cierra sesión con CSRF
         r_user = self.client.post(reverse('login'), {'login_id': 'pac1_s', 'password': 'password123'})
         self.assertEqual(r_user.status_code, 302)
         self.assertEqual(int(self.client.session['_auth_user_id']), self.user_pac1.id)
-        self.client.get(reverse('logout'))
+        self.assertEqual(self.client.get(reverse('logout')).status_code, 405)
+        self.assertIn('_auth_user_id', self.client.session)
+        self.client.post(reverse('logout'))
         self.assertNotIn('_auth_user_id', self.client.session)
 
         # Login por correo electrónico
         r_mail = self.client.post(reverse('login'), {'login_id': 'pac1s@correo.cl', 'password': 'password123'})
         self.assertEqual(r_mail.status_code, 302)
         self.assertEqual(int(self.client.session['_auth_user_id']), self.user_pac1.id)
-        self.client.get(reverse('logout'))
+        self.client.post(reverse('logout'))
 
         # Usuario inactivo no puede iniciar sesión
         r_inact = self.client.post(reverse('login'), {'login_id': 'inactivos@correo.cl', 'password': 'password123'})
@@ -1316,6 +1319,376 @@ class SuiteCompleta7FasesYSeguridadTests(TestCase):
         self.assertEqual(len(mail.outbox), 0)
         self.assertEqual(NotificacionCita.objects.count(), 0)
         self.assertIn('[DRY-RUN]', out.getvalue())
+
+
+class HardeningSeguridadLimitesTests(TestCase):
+    """
+    Pruebas de endurecimiento (security hardening): límites de caracteres en formularios,
+    mitigación de fuzzing/SQLi en parámetros GET, métodos POST obligatorios (anti-CSRF),
+    protección CSV Formula Injection, validación WebRTC y reglas de negocio estrictas.
+    """
+
+    def setUp(self):
+        self.rol_admin = Rol.objects.create(nombre='Administrador')
+        self.rol_prof = Rol.objects.create(nombre='Profesional')
+        self.rol_pac = Rol.objects.create(nombre='Paciente')
+        self.rol_recep = Rol.objects.create(nombre='Recepcionista')
+
+        self.user_prof = Usuario.objects.create_user(
+            username='prof_h',
+            email='profh@centronodo.cl',
+            password='password123',
+            first_name='Andrés',
+            last_name='Silva',
+            rol=self.rol_prof,
+        )
+        self.prof = Profesional.objects.create(
+            usuario=self.user_prof,
+            rut='15.342.980-4',
+            nombres='Andrés',
+            apellidos='Silva',
+            especialidad='Psiquiatría',
+        )
+        self.user_recep = Usuario.objects.create_user(
+            username='recep_h',
+            email='receph@centronodo.cl',
+            password='password123',
+            rol=self.rol_recep,
+        )
+        self.user_pac = Usuario.objects.create_user(
+            username='pac_h',
+            email='pach@correo.cl',
+            password='password123',
+            first_name='Juan',
+            last_name='Pérez',
+            rol=self.rol_pac,
+        )
+        self.pac = Paciente.objects.create(
+            usuario=self.user_pac,
+            rut='19.876.543-0',
+            nombres='Juan',
+            apellidos='Pérez',
+        )
+        self.ficha = FichaClinica.objects.create(paciente=self.pac)
+        self.client = Client()
+
+    def test_configuracion_seguridad_y_headers_http(self):
+        self.assertNotIn('*', settings.ALLOWED_HOSTS)
+        self.assertTrue(settings.SESSION_COOKIE_HTTPONLY)
+        self.assertTrue(settings.CSRF_COOKIE_HTTPONLY)
+        self.assertTrue(settings.SECURE_CONTENT_TYPE_NOSNIFF)
+        self.assertEqual(settings.X_FRAME_OPTIONS, 'DENY')
+        self.assertLessEqual(settings.DATA_UPLOAD_MAX_MEMORY_SIZE, 2 * 1024 * 1024)
+
+        resp = self.client.get(reverse('login'))
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.headers.get('X-Frame-Options'), 'DENY')
+        self.assertEqual(resp.headers.get('X-Content-Type-Options'), 'nosniff')
+
+    def test_vistas_mutadoras_exigen_post(self):
+        inicio = timezone.now() + timedelta(hours=3)
+        cita = Cita.objects.create(
+            paciente=self.pac,
+            profesional=self.prof,
+            fechaHoraInicio=inicio,
+            fechaHoraFin=inicio + timedelta(minutes=45),
+        )
+        vc = Videoconsulta.objects.create(cita=cita, urlSalaWebRTC='sala-post-only')
+        bloqueo = BloqueoHorario.objects.create(
+            profesional=self.prof,
+            fechaHoraInicio=inicio + timedelta(days=1),
+            fechaHoraFin=inicio + timedelta(days=1, hours=1),
+            motivo='Comité',
+        )
+        pago = Pago.objects.create(cita=cita, monto=Decimal('30000'), estado='Pendiente')
+
+        self.client.force_login(self.user_prof)
+        endpoints_prof = [
+            reverse('logout'),
+            reverse('ficha_editar_antecedentes', args=[self.ficha.id]),
+            reverse('atencion_crear', args=[self.ficha.id]),
+            reverse('cita_cambiar_estado', args=[cita.id]),
+            reverse('cita_enviar_recordatorio', args=[cita.id]),
+            reverse('bloqueo_crear'),
+            reverse('bloqueo_eliminar', args=[bloqueo.id]),
+            reverse('telemedicina_estado', args=[vc.id]),
+        ]
+        for url in endpoints_prof:
+            self.assertEqual(self.client.get(url).status_code, 405, f"{url} debe rechazar GET con 405")
+
+        self.client.force_login(self.user_recep)
+        self.assertEqual(self.client.get(reverse('pago_cambiar_estado', args=[pago.id])).status_code, 405)
+
+    def test_fuzzing_sqli_en_parametros_get_no_genera_500(self):
+        payload_sqli = "' OR '1'='1'; DROP TABLE cita; --"
+        query_larga = "A" * 300
+
+        self.client.force_login(self.user_prof)
+        self.assertEqual(self.client.get(reverse('pacientes_lista'), {'q': payload_sqli}).status_code, 200)
+        self.assertEqual(self.client.get(reverse('pacientes_lista'), {'q': query_larga}).status_code, 200)
+        self.assertEqual(self.client.get(reverse('fichas_lista'), {'q': payload_sqli}).status_code, 200)
+        self.assertEqual(self.client.get(reverse('ficha_detalle', args=[self.ficha.id]), {'cita_id': payload_sqli}).status_code, 200)
+
+        r_ag = self.client.get(reverse('agendamiento'), {
+            'profesional': payload_sqli,
+            'fecha': payload_sqli,
+            'estado': payload_sqli,
+            'paciente_id': payload_sqli,
+        })
+        self.assertEqual(r_ag.status_code, 200)
+        self.assertEqual(r_ag.context['citas'].count(), 0)
+
+        r_disp = self.client.get(reverse('agendamiento_disponibilidad'), {
+            'profesional_id': payload_sqli,
+            'fecha': '2026-11-12',
+        })
+        self.assertEqual(r_disp.status_code, 400)
+
+        self.client.force_login(self.user_recep)
+        r_caja = self.client.get(reverse('caja'), {
+            'fecha': payload_sqli,
+            'estado': payload_sqli,
+            'metodo': payload_sqli,
+            'cita_id': payload_sqli,
+            'comision': 'NaN',
+        })
+        self.assertEqual(r_caja.status_code, 200)
+        self.assertEqual(r_caja.context['pagos'].count(), 0)
+        self.assertEqual(self.client.get(reverse('caja_exportar_csv'), {'estado': payload_sqli}).status_code, 200)
+        self.assertEqual(self.client.get(reverse('caja_reporte_liquidacion'), {'metodo': payload_sqli}).status_code, 200)
+
+    def test_limites_caracteres_y_validacion_estricta_formularios(self):
+        # 1. PacienteForm: XSS / caracteres inválidos / longitud excesiva / clave corta
+        self.client.force_login(self.user_recep)
+        casos_invalidos_pac = [
+            {'rut': '12.345.678-5', 'nombres': '<script>alert(1)</script>', 'apellidos': 'Torres'},
+            {'rut': '12.345.678-5', 'nombres': 'A', 'apellidos': 'Torres'},
+            {'rut': '12.345.678-5', 'nombres': 'N' * 81, 'apellidos': 'Torres'},
+            {'rut': '12.345.678-5', 'nombres': 'Pedro', 'apellidos': 'Torres', 'telefono': 'no-es-telefono!!'},
+            {'rut': '12.345.678-50000', 'nombres': 'Pedro', 'apellidos': 'Torres'},
+            {
+                'rut': '12.345.678-5', 'nombres': 'Pedro', 'apellidos': 'Torres',
+                'crear_cuenta_web': True, 'email_cuenta': 'pedro@correo.cl', 'password_inicial': '123',
+            },
+        ]
+        for payload in casos_invalidos_pac:
+            r = self.client.post(reverse('paciente_crear'), payload)
+            self.assertEqual(r.status_code, 200)
+            self.assertEqual(Paciente.objects.count(), 1)
+
+        # 2. FichaClinicaForm y AtencionClinicaForm: topes de caracteres
+        self.client.force_login(self.user_prof)
+        self.client.post(reverse('ficha_editar_antecedentes', args=[self.ficha.id]), {
+            'grupoSanguineo': 'O+',
+            'alergias': 'A' * 1001,
+            'antecedentesMedicos': 'Ok',
+        })
+        self.ficha.refresh_from_db()
+        self.assertNotEqual(self.ficha.grupoSanguineo, 'O+')
+
+        r_at = self.client.post(reverse('atencion_crear', args=[self.ficha.id]), {
+            'profesional': self.prof.id,
+            'motivoConsulta': 'X' * 1001,
+            'diagnostico': 'Ok clínico',
+            'evolucionNotas': 'E' * 5001,
+            'indicacionesTratamiento': 'I' * 3001,
+        })
+        self.assertEqual(r_at.status_code, 200)
+        self.assertEqual(AtencionClinica.objects.count(), 0)
+
+        # 3. BloqueoHorarioForm: rechaza pasado, exceso de caracteres y solapamiento de bloqueos
+        ayer = (timezone.localdate() - timedelta(days=1)).strftime('%Y-%m-%d')
+        futuro = (timezone.localdate() + timedelta(days=4)).strftime('%Y-%m-%d')
+        self.client.post(reverse('bloqueo_crear'), {
+            'profesional': self.prof.id,
+            'fecha': ayer,
+            'hora_inicio': '10:00',
+            'hora_fin': '11:00',
+            'motivo': 'Pasado',
+        })
+        self.assertEqual(BloqueoHorario.objects.count(), 0)
+
+        self.client.post(reverse('bloqueo_crear'), {
+            'profesional': self.prof.id,
+            'fecha': futuro,
+            'hora_inicio': '09:00',
+            'hora_fin': '10:00',
+            'motivo': 'M' * 151,
+        })
+        self.assertEqual(BloqueoHorario.objects.count(), 0)
+
+        self.client.post(reverse('bloqueo_crear'), {
+            'profesional': self.prof.id,
+            'fecha': futuro,
+            'hora_inicio': '09:00',
+            'hora_fin': '11:00',
+            'motivo': 'Bloqueo válido',
+        })
+        self.assertEqual(BloqueoHorario.objects.count(), 1)
+
+        # Bloqueo solapado -> rechazado
+        self.client.post(reverse('bloqueo_crear'), {
+            'profesional': self.prof.id,
+            'fecha': futuro,
+            'hora_inicio': '10:00',
+            'hora_fin': '12:00',
+            'motivo': 'Solapado',
+        })
+        self.assertEqual(BloqueoHorario.objects.count(), 1)
+
+        # 4. PagoForm: monto fuera de rango y doble cobro Pagado sobre la misma cita
+        cita = Cita.objects.create(
+            paciente=self.pac,
+            profesional=self.prof,
+            fechaHoraInicio=timezone.now() + timedelta(hours=5),
+            fechaHoraFin=timezone.now() + timedelta(hours=5, minutes=45),
+        )
+        self.client.force_login(self.user_recep)
+        self.client.post(reverse('caja'), {
+            'cita': cita.id, 'monto': '99999999', 'prevision': 'Particular',
+            'metodoPago': 'Efectivo', 'estado': 'Pagado',
+        })
+        self.assertEqual(Pago.objects.count(), 0)
+
+        self.client.post(reverse('caja'), {
+            'cita': cita.id, 'monto': '35000', 'prevision': 'Particular',
+            'metodoPago': 'Efectivo', 'estado': 'Pagado',
+        })
+        self.assertEqual(Pago.objects.count(), 1)
+
+        # Segundo intento 'Pagado' sobre la misma cita -> rechazado
+        self.client.post(reverse('caja'), {
+            'cita': cita.id, 'monto': '35000', 'prevision': 'Particular',
+            'metodoPago': 'Débito', 'estado': 'Pagado',
+        })
+        self.assertEqual(Pago.objects.count(), 1)
+
+    def test_reglas_estado_cita_y_telemedicina_cancelada(self):
+        cita_pasada = Cita.objects.create(
+            paciente=self.pac,
+            profesional=self.prof,
+            fechaHoraInicio=timezone.now() - timedelta(hours=3),
+            fechaHoraFin=timezone.now() - timedelta(hours=2),
+            estado='Agendada',
+        )
+        cita_realizada = Cita.objects.create(
+            paciente=self.pac,
+            profesional=self.prof,
+            fechaHoraInicio=timezone.now() + timedelta(hours=4),
+            fechaHoraFin=timezone.now() + timedelta(hours=4, minutes=45),
+            estado='Realizada',
+        )
+        cita_cancelada = Cita.objects.create(
+            paciente=self.pac,
+            profesional=self.prof,
+            fechaHoraInicio=timezone.now() + timedelta(hours=6),
+            fechaHoraFin=timezone.now() + timedelta(hours=6, minutes=45),
+            estado='Cancelada',
+        )
+        vc_cancelada = Videoconsulta.objects.create(cita=cita_cancelada, urlSalaWebRTC='sala-canc')
+
+        # Paciente no puede cancelar cita pasada ni realizada
+        self.client.force_login(self.user_pac)
+        self.client.post(reverse('cita_cambiar_estado', args=[cita_pasada.id]), {'estado': 'Cancelada'})
+        cita_pasada.refresh_from_db()
+        self.assertEqual(cita_pasada.estado, 'Agendada')
+
+        self.client.post(reverse('cita_cambiar_estado', args=[cita_realizada.id]), {'estado': 'Cancelada'})
+        cita_realizada.refresh_from_db()
+        self.assertEqual(cita_realizada.estado, 'Realizada')
+
+        # Profesional no puede revertir cita Realizada a Agendada
+        self.client.force_login(self.user_prof)
+        self.client.post(reverse('cita_cambiar_estado', args=[cita_realizada.id]), {'estado': 'Agendada'})
+        cita_realizada.refresh_from_db()
+        self.assertEqual(cita_realizada.estado, 'Realizada')
+
+        # Sala de telemedicina cancelada bloquea acceso y endpoints WebRTC
+        self.assertEqual(self.client.get(reverse('telemedicina_sala', args=[vc_cancelada.id])).status_code, 302)
+        self.assertEqual(
+            self.client.post(reverse('telemedicina_estado', args=[vc_cancelada.id]), {'estadoConexion': 'En curso'}).status_code,
+            409,
+        )
+        self.assertEqual(self.client.get(reverse('telemedicina_senal', args=[vc_cancelada.id])).status_code, 409)
+
+    def test_webrtc_senalizacion_hardening_payload_rol_y_tope_ice(self):
+        inicio = timezone.now() + timedelta(hours=2)
+        cita = Cita.objects.create(
+            paciente=self.pac,
+            profesional=self.prof,
+            fechaHoraInicio=inicio,
+            fechaHoraFin=inicio + timedelta(minutes=45),
+            estado='Confirmada',
+        )
+        vc = Videoconsulta.objects.create(cita=cita, urlSalaWebRTC='sala-hard-01', estadoConexion='En curso')
+        url_senal = reverse('telemedicina_senal', args=[vc.id])
+
+        self.client.force_login(self.user_prof)
+        # Lista JSON no dict -> 400 (sin HTTP 500)
+        self.assertEqual(self.client.post(url_senal, data='[1, 2, 3]', content_type='application/json').status_code, 400)
+        # Tipo no reconocido -> 400
+        self.assertEqual(self.client.post(url_senal, data=json.dumps({'type': 'evil'}), content_type='application/json').status_code, 400)
+        # Body > 64 KB -> 413
+        huge_payload = json.dumps({'type': 'offer', 'sdp': {'type': 'offer', 'sdp': 'x' * 70000}})
+        self.assertEqual(self.client.post(url_senal, data=huge_payload, content_type='application/json').status_code, 413)
+        # SDP > 32 KB -> 400
+        oversized_sdp = json.dumps({'type': 'offer', 'sdp': {'type': 'offer', 'sdp': 'x' * 40000}})
+        self.assertEqual(self.client.post(url_senal, data=oversized_sdp, content_type='application/json').status_code, 400)
+        # Host no puede enviar answer -> 403
+        self.assertEqual(
+            self.client.post(url_senal, data=json.dumps({'type': 'answer', 'sdp': {'type': 'answer', 'sdp': 'a'}}), content_type='application/json').status_code,
+            403,
+        )
+
+        # Guest no puede hacer reset ni enviar offer -> 403
+        self.client.force_login(self.user_pac)
+        self.assertEqual(self.client.post(url_senal, data=json.dumps({'type': 'reset'}), content_type='application/json').status_code, 403)
+        self.assertEqual(
+            self.client.post(url_senal, data=json.dumps({'type': 'offer', 'sdp': {'type': 'offer', 'sdp': 'o'}}), content_type='application/json').status_code,
+            403,
+        )
+
+        # Tope máximo de 50 candidatos ICE por peer -> el 51 retorna 429
+        for i in range(50):
+            r_ice = self.client.post(
+                url_senal,
+                data=json.dumps({'type': 'ice', 'candidate': {'candidate': f'c-{i}'}}),
+                content_type='application/json',
+            )
+            self.assertEqual(r_ice.status_code, 200)
+        r_overflow = self.client.post(
+            url_senal,
+            data=json.dumps({'type': 'ice', 'candidate': {'candidate': 'c-51'}}),
+            content_type='application/json',
+        )
+        self.assertEqual(r_overflow.status_code, 429)
+
+    def test_csv_exportacion_mitiga_formula_injection(self):
+        pac_malicioso = Paciente.objects.create(
+            rut='12.345.678-5',
+            nombres="=cmd|'/C calc'!A0",
+            apellidos='@SUM(1+1)',
+        )
+        cita = Cita.objects.create(
+            paciente=pac_malicioso,
+            profesional=self.prof,
+            fechaHoraInicio=timezone.now() + timedelta(hours=1),
+            fechaHoraFin=timezone.now() + timedelta(hours=1, minutes=45),
+        )
+        Pago.objects.create(
+            cita=cita,
+            monto=Decimal('25000'),
+            estado='Pagado',
+            numeroComprobante='+CMP-INJ',
+        )
+
+        self.client.force_login(self.user_recep)
+        resp = self.client.get(reverse('caja_exportar_csv'))
+        self.assertEqual(resp.status_code, 200)
+        csv_body = resp.content.decode('utf-8-sig')
+        self.assertIn("'=cmd|'/C calc'!A0 @SUM(1+1)", csv_body)
+        self.assertIn("'+CMP-INJ", csv_body)
+
 
 
 

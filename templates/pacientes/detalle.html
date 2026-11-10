@@ -76,8 +76,12 @@
                             <td>
                                 {% if c.atencion_clinica and puede_ver_ficha %}
                                     <a href="{% url 'ficha_detalle' ficha.id %}" class="btn btn-sm btn-secondary">Ver Evolución</a>
-                                {% elif c.estado != 'Cancelada' and user.es_administrador or c.estado != 'Cancelada' and user.es_profesional %}
-                                    <a href="{% url 'ficha_detalle' ficha.id %}?cita_id={{ c.id }}" class="btn btn-sm btn-primary">Registrar Atención</a>
+                                {% elif c.estado != 'Cancelada' %}
+                                    {% if user.es_administrador or user.es_profesional %}
+                                        <a href="{% url 'ficha_detalle' ficha.id %}?cita_id={{ c.id }}" class="btn btn-sm btn-primary">Registrar Atención</a>
+                                    {% else %}
+                                        —
+                                    {% endif %}
                                 {% else %}
                                     —
                                 {% endif %}

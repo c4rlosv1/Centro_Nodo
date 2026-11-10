@@ -57,7 +57,10 @@
                             </div>
                         </li>
                         <li>
-                            <a href="{% url 'logout' %}" class="btn-logout" title="Cerrar Sesión">Cerrar Sesión</a>
+                            <form method="POST" action="{% url 'logout' %}" class="logout-form">
+                                {% csrf_token %}
+                                <button type="submit" class="btn-logout" title="Cerrar Sesión">Cerrar Sesión</button>
+                            </form>
                         </li>
                     {% else %}
                         <li>

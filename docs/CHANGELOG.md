@@ -148,13 +148,37 @@
   - Comando `python manage.py enviar_recordatorios_citas [--horas 24] [--dry-run]` para enviar recordatorios de citas activas próximas evitando duplicados cuando ya existe un `Recordatorio` exitoso.
 
 
+### 15. Endurecimiento de Seguridad, Validación de Inputs y Corrección de Errores (Hardening)
+- **Seguridad HTTP y Sesión (`core/settings.py`, `.env.example`, `templates/base.html`, `clinica/views.py`):**
+  - Eliminado el wildcard `'*'` en `ALLOWED_HOSTS`, restringiéndolo a variables de entorno o `['localhost', '127.0.0.1', 'testserver']`.
+  - Activadas cabeceras y cookies de seguridad (`SESSION_COOKIE_HTTPONLY`, `CSRF_COOKIE_HTTPONLY`, `SameSite='Lax'`, `SECURE_CONTENT_TYPE_NOSNIFF`, `X_FRAME_OPTIONS='DENY'`, `DATA_UPLOAD_MAX_MEMORY_SIZE=2MB`).
+  - Cierre de sesión (`logout_view`) protegido contra CSRF exigiendo método `POST` (`@require_POST` y formulario con `{% csrf_token %}` en `templates/base.html`).
+  - Aplicado `@require_POST` a todas las vistas de mutación de estado (`ficha_editar_antecedentes_view`, `atencion_crear_view`, `cita_cambiar_estado_view`, `cita_enviar_recordatorio_view`, `bloqueo_crear_view`, `bloqueo_eliminar_view`, `pago_cambiar_estado_view`, `telemedicina_estado_view`).
+- **Prevención de Errores HTTP 500, Fuzzing/SQLi en Parámetros GET (`clinica/utils.py`, `clinica/views.py`):**
+  - Todo acceso a BD permanece 100% parametrizado vía ORM de Django sin SQL crudo en vistas/formularios.
+  - Nuevo helper `parse_positive_int()` aplicado a `profesional`, `profesional_id`, `paciente_id` y `cita_id` en filtros GET y endpoint `/agendamiento/disponibilidad/`, eliminando caídas `ValueError` (HTTP 500) ante payloads malformados o intentos SQLi.
+  - Whitelists estrictas para filtros de estado y medio de pago (`ESTADOS_CITA_VALIDOS`, `ESTADOS_PAGO_VALIDOS`, `METODOS_PAGO_VALIDOS`) más acotamiento máximo de 80 caracteres en búsquedas `?q=` (`templates/pacientes/lista.html`, `templates/fichas/lista.html`).
+- **Límites de Caracteres y Validación Estricta de Formularios (`clinica/forms.py`, `clinica/utils.py`, `templates/fichas/detalle.html`):**
+  - `LoginForm` y `CustomPasswordResetForm`: topes `max_length`/`maxlength` (150 en identificador/correo, 128 en contraseñas).
+  - `PacienteForm`: RUT máx. 15 caracteres (longitud limpia entre 6 y 10 en `validar_rut`), nombres/apellidos (2–80 caracteres con whitelist alfabética anti-XSS/SQL), teléfono válido (6–20 caracteres), clave inicial >= 6 caracteres no vacíos.
+  - `FichaClinicaForm` y `AtencionClinicaForm`: alergias <= 1000, antecedentes <= 4000, motivo y diagnóstico (2–1000), notas de evolución <= 5000, indicaciones <= 3000; visualización explícita de errores por campo en `fichas/detalle.html` y `telemedicina_sala.html`.
+  - `BloqueoHorarioForm`: motivo <= 150, rechazo de fechas/horas pasadas y detección de solapamiento entre bloqueos activos.
+  - `PagoForm`: monto acotado entre \$1 y \$5.000.000, comprobante <= 40, observaciones <= 200 y rechazo de doble cobro confirmado sobre la misma cita.
+- **Concurrencia Atómica, Lógica de Negocio, CSV Injection y WebRTC Hardening (`clinica/views.py`, `templates/telemedicina_sala.html`, `templates/pacientes/detalle.html`):**
+  - Revalidación atómica (`transaction.atomic()` + `select_for_update()`) al agendar citas, crear bloqueos horarios, registrar atenciones por cita y generar correlativos/confirmaciones de pago.
+  - Bloqueo de cancelación por parte de pacientes sobre citas pasadas o `Realizada`, bloqueo de reversión de citas `Realizada`, y bloqueo de salas WebRTC si la cita fue `Cancelada`.
+  - Neutralización contra **CSV Formula Injection (CWE-1236)** mediante `sanitizar_celda_csv()` en exportación a Excel (`/caja/exportar/`).
+  - Endurecimiento de `/telemedicina/sala/<id>/senal/` (máximo 64 KB por payload, validación de diccionario JSON y tipo de mensaje, SDP <= 32 KB, ICE <= 2 KB y máximo 50 candidatos por par, `reset` exclusivo de `host` en curso) y eliminación de `.innerHTML` en JavaScript de `telemedicina_sala.html`.
+  - Corrección de precedencia en botón de atención en `templates/pacientes/detalle.html`.
+
+
 ---
 
 ## 🔍 Verificación Realizada
 - **Migraciones:** Todas las migraciones (`0001` a `0005` de `clinica` + `admin`, `auth`, `contenttypes`, `sessions`) aplicadas exitosamente y validadas con `makemigrations --check --dry-run` (**Sin cambios pendientes**).
 - **Chequeo del sistema:** `python manage.py check` (**0 issues**).
 - **Pruebas Automatizadas:**
-  - Bloqueo de usuarios anónimos en rutas privadas (redirección a login), inicio de sesión con `username` o `email`, bloqueo de cuentas inactivas y cierre de sesión: **OK**.
-  - Suite completa `python manage.py test clinica -v 2` (**21 pruebas** cubriendo las **7 Fases** y casos límite de seguridad: RUT Módulo 11, Pacientes sin duplicados, Fichas/Atenciones, RBAC estricto y aislamiento cruzado entre pacientes, Agendamiento anti-colisiones por profesional/paciente/bloqueos/bordes/cancelación, Cifrado Fernet en BD cruda, Dashboards por rol, Telemedicina Dual/AJAX/Sala de Espera WebRTC HTTP 409, Caja/Liquidaciones/Anulación/Comprobante/Reporte PDF/CSV, Documentos Clínicos PDF y Notificaciones/Recordatorios automáticos, manuales y `--dry-run`): **OK**.
+  - Bloqueo de usuarios anónimos en rutas privadas (redirección a login), inicio de sesión con `username` o `email`, bloqueo de cuentas inactivas y cierre de sesión protegido vía POST: **OK**.
+  - Suite completa `python manage.py test clinica -v 2` (**28 pruebas** cubriendo las **7 Fases** y el conjunto `HardeningSeguridadLimitesTests`: RUT Módulo 11, Pacientes sin duplicados ni caracteres inválidos, límites de caracteres en todos los formularios, RBAC estricto y aislamiento cruzado entre pacientes, Agendamiento anti-colisiones atómico, Cifrado Fernet en BD cruda, Dashboards por rol, Telemedicina Dual/AJAX/Sala de Espera WebRTC HTTP 409 y endurecimiento SDP/ICE, Caja/Liquidaciones/Anulación/Comprobante/Reporte PDF/CSV anti-inyección de fórmulas, Documentos Clínicos PDF, Notificaciones/Recordatorios automáticos/manuales/`--dry-run`, fuzzing GET/SQLi sin HTTP 500 y cabeceras/métodos HTTP seguros): **OK**.
 
 

@@ -1,4 +1,6 @@
+import re
 from datetime import datetime, timedelta
+from decimal import Decimal
 from django import forms
 from django.contrib.auth.forms import PasswordResetForm, SetPasswordForm
 from django.db.models import Q
@@ -23,20 +25,26 @@ class LoginForm(forms.Form):
     """
     login_id = forms.CharField(
         label="Usuario o Correo Electrónico",
+        min_length=3,
+        max_length=150,
         widget=forms.TextInput(attrs={
             'class': 'form-control',
             'placeholder': 'Ej. usuario o nombre@centronodo.cl',
             'autocomplete': 'username',
+            'maxlength': '150',
             'required': True,
             'autofocus': True,
         })
     )
     password = forms.CharField(
         label="Contraseña",
+        min_length=4,
+        max_length=128,
         widget=forms.PasswordInput(attrs={
             'class': 'form-control',
             'placeholder': '••••••••',
             'autocomplete': 'current-password',
+            'maxlength': '128',
             'required': True,
         })
     )
@@ -54,11 +62,12 @@ class CustomPasswordResetForm(PasswordResetForm):
     """
     email = forms.EmailField(
         label="Correo Electrónico Registrado",
-        max_length=254,
+        max_length=150,
         widget=forms.EmailInput(attrs={
             'class': 'form-control',
             'placeholder': 'tu-correo@centronodo.cl',
             'autocomplete': 'email',
+            'maxlength': '150',
             'required': True,
             'autofocus': True,
         })
@@ -72,7 +81,7 @@ class CustomSetPasswordForm(SetPasswordForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         for field in self.fields.values():
-            field.widget.attrs.update({'class': 'form-control'})
+            field.widget.attrs.update({'class': 'form-control', 'maxlength': '128'})
 
 
 # ==============================================================================
@@ -92,19 +101,23 @@ class PacienteForm(forms.ModelForm):
     )
     email_cuenta = forms.EmailField(
         required=False,
+        max_length=150,
         label="Correo Electrónico de Acceso",
         widget=forms.EmailInput(attrs={
             'class': 'form-control',
-            'placeholder': 'paciente@correo.cl'
+            'placeholder': 'paciente@correo.cl',
+            'maxlength': '150',
         })
     )
     password_inicial = forms.CharField(
         required=False,
         label="Contraseña Inicial",
         min_length=6,
+        max_length=128,
         widget=forms.PasswordInput(attrs={
             'class': 'form-control',
-            'placeholder': 'Mínimo 6 caracteres'
+            'placeholder': 'Mínimo 6 caracteres',
+            'maxlength': '128',
         })
     )
 
@@ -118,14 +131,21 @@ class PacienteForm(forms.ModelForm):
             'telefono': 'Teléfono de Contacto',
         }
         widgets = {
-            'rut': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Ej. 19.876.543-0'}),
-            'nombres': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Ej. María José'}),
-            'apellidos': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Ej. González Pérez'}),
-            'telefono': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Ej. +56 9 1234 5678'}),
+            'rut': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Ej. 19.876.543-0', 'maxlength': '15'}),
+            'nombres': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Ej. María José', 'maxlength': '80'}),
+            'apellidos': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Ej. González Pérez', 'maxlength': '80'}),
+            'telefono': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Ej. +56 9 1234 5678', 'maxlength': '20'}),
         }
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.fields['rut'].max_length = 15
+        self.fields['nombres'].min_length = 2
+        self.fields['nombres'].max_length = 80
+        self.fields['apellidos'].min_length = 2
+        self.fields['apellidos'].max_length = 80
+        self.fields['telefono'].max_length = 20
+
         # Si es edición y ya tiene usuario o simplemente editando datos del paciente,
         # ocultar campos de creación de cuenta si ya existe usuario.
         if self.instance and self.instance.pk and self.instance.usuario_id:
@@ -133,9 +153,33 @@ class PacienteForm(forms.ModelForm):
             self.fields.pop('email_cuenta', None)
             self.fields.pop('password_inicial', None)
 
+    def clean_nombres(self):
+        nombres = re.sub(r'\s+', ' ', (self.cleaned_data.get('nombres') or '').strip())
+        if len(nombres) < 2 or len(nombres) > 80:
+            raise forms.ValidationError("Los nombres deben tener entre 2 y 80 caracteres.")
+        if not re.match(r"^[A-Za-zÁÉÍÓÚÜÑáéíóúüñ'\-\.\s]+$", nombres):
+            raise forms.ValidationError("Los nombres solo pueden contener letras, espacios, guiones o puntos.")
+        return nombres
+
+    def clean_apellidos(self):
+        apellidos = re.sub(r'\s+', ' ', (self.cleaned_data.get('apellidos') or '').strip())
+        if len(apellidos) < 2 or len(apellidos) > 80:
+            raise forms.ValidationError("Los apellidos deben tener entre 2 y 80 caracteres.")
+        if not re.match(r"^[A-Za-zÁÉÍÓÚÜÑáéíóúüñ'\-\.\s]+$", apellidos):
+            raise forms.ValidationError("Los apellidos solo pueden contener letras, espacios, guiones o puntos.")
+        return apellidos
+
+    def clean_telefono(self):
+        telefono = (self.cleaned_data.get('telefono') or '').strip()
+        if not telefono:
+            return ''
+        if len(telefono) > 20 or not re.match(r"^[+\d\s\-()]{6,20}$", telefono):
+            raise forms.ValidationError("Ingrese un teléfono válido (entre 6 y 20 caracteres, solo dígitos, +, -, paréntesis y espacios).")
+        return telefono
+
     def clean_rut(self):
         rut_raw = self.cleaned_data.get('rut', '').strip()
-        if not validar_rut(rut_raw):
+        if len(rut_raw) > 15 or not validar_rut(rut_raw):
             raise forms.ValidationError(
                 "El RUT ingresado no es válido. Verifique los dígitos y el dígito verificador."
             )
@@ -166,8 +210,8 @@ class PacienteForm(forms.ModelForm):
             elif Usuario.objects.filter(email__iexact=email).exists():
                 self.add_error('email_cuenta', "Este correo ya está registrado en otra cuenta de usuario.")
 
-            if not password:
-                self.add_error('password_inicial', "Debe asignar una contraseña inicial para el paciente.")
+            if not password or not password.strip():
+                self.add_error('password_inicial', "Debe asignar una contraseña inicial válida para el paciente.")
 
         return cleaned_data
 
@@ -206,14 +250,28 @@ class FichaClinicaForm(forms.ModelForm):
             'alergias': forms.Textarea(attrs={
                 'class': 'form-control',
                 'rows': 2,
+                'maxlength': '1000',
                 'placeholder': 'Ej. Penicilina, látex o "Ninguna conocida"'
             }),
             'antecedentesMedicos': forms.Textarea(attrs={
                 'class': 'form-control',
                 'rows': 4,
+                'maxlength': '4000',
                 'placeholder': 'Historial médico relevante, diagnósticos previos, medicación crónica...'
             }),
         }
+
+    def clean_alergias(self):
+        texto = (self.cleaned_data.get('alergias') or '').strip()
+        if len(texto) > 1000:
+            raise forms.ValidationError("Las alergias no pueden superar los 1000 caracteres.")
+        return texto
+
+    def clean_antecedentesMedicos(self):
+        texto = (self.cleaned_data.get('antecedentesMedicos') or '').strip()
+        if len(texto) > 4000:
+            raise forms.ValidationError("Los antecedentes médicos no pueden superar los 4000 caracteres.")
+        return texto
 
 
 class AtencionClinicaForm(forms.ModelForm):
@@ -245,21 +303,25 @@ class AtencionClinicaForm(forms.ModelForm):
             'motivoConsulta': forms.Textarea(attrs={
                 'class': 'form-control',
                 'rows': 2,
+                'maxlength': '1000',
                 'placeholder': 'Motivo principal por el cual consulta el paciente en esta sesión...'
             }),
             'diagnostico': forms.Textarea(attrs={
                 'class': 'form-control',
                 'rows': 2,
+                'maxlength': '1000',
                 'placeholder': 'Evaluación clínica, código CIE-10 / DSM-5 o hipótesis diagnóstica...'
             }),
             'evolucionNotas': forms.Textarea(attrs={
                 'class': 'form-control',
                 'rows': 4,
+                'maxlength': '5000',
                 'placeholder': 'Observaciones terapéuticas, progreso y notas reservadas de la sesión...'
             }),
             'indicacionesTratamiento': forms.Textarea(attrs={
                 'class': 'form-control',
                 'rows': 3,
+                'maxlength': '3000',
                 'placeholder': 'Indicaciones terapéuticas, pautas, derivaciones o fármacos...'
             }),
         }
@@ -267,6 +329,10 @@ class AtencionClinicaForm(forms.ModelForm):
     def __init__(self, *args, paciente=None, user=None, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields['cita'].required = False
+        self.fields['motivoConsulta'].max_length = 1000
+        self.fields['diagnostico'].max_length = 1000
+        self.fields['evolucionNotas'].max_length = 5000
+        self.fields['indicacionesTratamiento'].max_length = 3000
 
         if paciente is not None:
             # Mostrar citas de este paciente sin atención asociada (o la cita actual si se está editando)
@@ -283,6 +349,30 @@ class AtencionClinicaForm(forms.ModelForm):
         if user is not None and hasattr(user, 'profesional'):
             self.fields['profesional'].queryset = Profesional.objects.filter(pk=user.profesional.pk)
             self.fields['profesional'].initial = user.profesional
+
+    def clean_motivoConsulta(self):
+        texto = (self.cleaned_data.get('motivoConsulta') or '').strip()
+        if len(texto) < 2 or len(texto) > 1000:
+            raise forms.ValidationError("El motivo de consulta debe tener entre 2 y 1000 caracteres.")
+        return texto
+
+    def clean_diagnostico(self):
+        texto = (self.cleaned_data.get('diagnostico') or '').strip()
+        if len(texto) < 2 or len(texto) > 1000:
+            raise forms.ValidationError("El diagnóstico debe tener entre 2 y 1000 caracteres.")
+        return texto
+
+    def clean_evolucionNotas(self):
+        texto = (self.cleaned_data.get('evolucionNotas') or '').strip()
+        if len(texto) > 5000:
+            raise forms.ValidationError("Las notas de evolución no pueden superar los 5000 caracteres.")
+        return texto
+
+    def clean_indicacionesTratamiento(self):
+        texto = (self.cleaned_data.get('indicacionesTratamiento') or '').strip()
+        if len(texto) > 3000:
+            raise forms.ValidationError("Las indicaciones terapéuticas no pueden superar los 3000 caracteres.")
+        return texto
 
 
 # ==============================================================================
@@ -449,10 +539,11 @@ class BloqueoHorarioForm(forms.Form):
     )
     motivo = forms.CharField(
         required=False,
-        max_length=255,
+        max_length=150,
         label="Motivo del Bloqueo",
         widget=forms.TextInput(attrs={
             'class': 'form-control',
+            'maxlength': '150',
             'placeholder': 'Ej. Capacitación, Colación, Reunión clínica, Licencia...'
         })
     )
@@ -465,6 +556,9 @@ class BloqueoHorarioForm(forms.Form):
         if user is not None and user.es_profesional and hasattr(user, 'profesional'):
             self.fields['profesional'].queryset = Profesional.objects.filter(pk=user.profesional.pk)
             self.fields['profesional'].initial = user.profesional
+
+    def clean_motivo(self):
+        return (self.cleaned_data.get('motivo') or '').strip()
 
     def clean(self):
         cleaned_data = super().clean()
@@ -483,6 +577,9 @@ class BloqueoHorarioForm(forms.Form):
         inicio = timezone.make_aware(datetime.combine(fecha, hora_inicio), tz)
         fin = timezone.make_aware(datetime.combine(fecha, hora_fin), tz)
 
+        if inicio < timezone.now():
+            raise forms.ValidationError("No es posible registrar bloqueos en fechas u horas pasadas.")
+
         # Validar que no existan citas activas en el tramo que se quiere bloquear
         citas_conflicto = Cita.objects.filter(
             profesional=profesional,
@@ -499,6 +596,16 @@ class BloqueoHorarioForm(forms.Form):
                 f"(ej. {primera.paciente.nombres} {primera.paciente.apellidos} de {h_ini} a {h_fin}). "
                 f"Cancele o reprograme la cita primero."
             )
+
+        # Validar que no exista otro bloqueo activo superpuesto del mismo profesional
+        bloqueo_conflicto = BloqueoHorario.objects.filter(
+            profesional=profesional,
+            estado='Activo',
+            fechaHoraInicio__lt=fin,
+            fechaHoraFin__gt=inicio,
+        ).first()
+        if bloqueo_conflicto:
+            raise forms.ValidationError("Ya existe un bloqueo horario activo que se superpone con ese tramo.")
 
         cleaned_data['fechaHoraInicio'] = inicio
         cleaned_data['fechaHoraFin'] = fin
@@ -557,20 +664,62 @@ class PagoForm(forms.ModelForm):
         }
         widgets = {
             'cita': forms.Select(attrs={'class': 'form-control'}),
-            'monto': forms.NumberInput(attrs={'class': 'form-control', 'min': '0', 'step': '500', 'placeholder': 'Ej. 35000'}),
-            'numeroComprobante': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Se autogenera si se deja vacío'}),
-            'observaciones': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Ej. Bono electrónico o detalle adicional'}),
+            'monto': forms.NumberInput(attrs={
+                'class': 'form-control',
+                'min': '1',
+                'max': '5000000',
+                'step': '500',
+                'placeholder': 'Ej. 35000'
+            }),
+            'numeroComprobante': forms.TextInput(attrs={
+                'class': 'form-control',
+                'maxlength': '40',
+                'placeholder': 'Se autogenera si se deja vacío'
+            }),
+            'observaciones': forms.TextInput(attrs={
+                'class': 'form-control',
+                'maxlength': '200',
+                'placeholder': 'Ej. Bono electrónico o detalle adicional'
+            }),
         }
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.fields['numeroComprobante'].max_length = 40
+        self.fields['observaciones'].max_length = 200
         self.fields['cita'].queryset = Cita.objects.select_related('paciente', 'profesional').exclude(
             estado='Cancelada'
-        ).order_by('-fechaHoraInicio')
+        ).exclude(pagos__estado='Pagado').distinct().order_by('-fechaHoraInicio')
 
     def clean_monto(self):
         monto = self.cleaned_data.get('monto')
         if monto is None or monto <= 0:
             raise forms.ValidationError("El monto del pago debe ser mayor a $0.")
+        if monto > Decimal('5000000'):
+            raise forms.ValidationError("El monto máximo permitido por comprobante es de $5.000.000.")
         return monto
+
+    def clean_numeroComprobante(self):
+        val = (self.cleaned_data.get('numeroComprobante') or '').strip()
+        if len(val) > 40:
+            raise forms.ValidationError("El N° de comprobante no puede superar 40 caracteres.")
+        return val
+
+    def clean_observaciones(self):
+        val = (self.cleaned_data.get('observaciones') or '').strip()
+        if len(val) > 200:
+            raise forms.ValidationError("Las observaciones no pueden superar 200 caracteres.")
+        return val
+
+    def clean(self):
+        cleaned_data = super().clean()
+        cita = cleaned_data.get('cita')
+        estado = cleaned_data.get('estado')
+        if cita and estado == 'Pagado':
+            ya_pagado = cita.pagos.filter(estado='Pagado').exclude(pk=self.instance.pk).exists()
+            if ya_pagado:
+                raise forms.ValidationError(
+                    f"La Cita #{cita.id} ya tiene un pago confirmado. Anule el pago previo antes de registrar uno nuevo."
+                )
+        return cleaned_data
 
